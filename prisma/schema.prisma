@@ -1,0 +1,316 @@
+// Prisma Schema for Agroimportadora AgroPerú Management System
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  SALES
+  WAREHOUSE
+  PRODUCTION
+  MANAGEMENT
+}
+
+enum MovementType {
+  INITIAL_STOCK
+  PURCHASE
+  SALE
+  MIX_CONSUMPTION
+  MIX_PRODUCTION
+  ADJUSTMENT
+  RETURN
+}
+
+enum SaleStatus {
+  PENDIENTE
+  PAGADO
+  CREDITO
+  ANULADO
+  ENTREGADO
+}
+
+enum DocumentType {
+  DNI
+  RUC
+  PROFORMA
+  BOLETA
+  FACTURA
+  GUIA
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  password  String
+  role      Role     @default(SALES)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sales     Sale[]
+  purchases Purchase[]
+  audits    PhysicalAudit[]
+
+  @@map("users")
+}
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  products    Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id            String   @id @default(uuid())
+  code          String   @unique // Ej: UREA-AGR, SULF-MARR
+  name          String   // Estandarizado (Ej: Urea Agrícola)
+  categoryId    String
+  category      Category @relation(fields: [categoryId], references: [id])
+  unit          String   @default("TM") // TM, Bolsa, Kg, Litros
+  bagWeightKg   Float    @default(50.0) // 50kg estándar = 20 bolsas/TM
+  minStockTm    Float    @default(5.0)
+  purchasePrice Float    @default(0.0) // S/ por TM
+  salePrice     Float    @default(0.0) // S/ por TM o Bolsa
+  isMix         Boolean  @default(false)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  movements         InventoryMovement[]
+  purchaseItems     PurchaseItem[]
+  saleItems         SaleItem[]
+  mixRecipeTarget   MixRecipe[]          @relation("TargetProduct")
+  mixRecipeItems    MixRecipeItem[]
+  mixExecutionItems MixExecutionItem[]
+  bagStock          BagStock?
+  auditItems        PhysicalAuditItem[]
+
+  @@map("products")
+}
+
+model Customer {
+  id             String   @id @default(uuid())
+  name           String
+  docType        DocumentType @default(DNI)
+  docNumber      String   @unique
+  phone          String?
+  address        String?
+  creditLimit    Float    @default(0.0)
+  currentDebt    Float    @default(0.0)
+  createdAt      DateTime @default(now())
+
+  sales Sale[]
+
+  @@map("customers")
+}
+
+model Supplier {
+  id          String   @id @default(uuid())
+  companyName String
+  ruc         String   @unique
+  contactName String?
+  phone       String?
+  address     String?
+  createdAt   DateTime @default(now())
+
+  purchases Purchase[]
+
+  @@map("suppliers")
+}
+
+model Purchase {
+  id             String   @id @default(uuid())
+  supplierId     String
+  supplier       Supplier @relation(fields: [supplierId], references: [id])
+  docNumber      String   // Boleta / Factura
+  purchaseDate   DateTime
+  freightCostPen Float    @default(0.0) // Costo envío
+  exchangeRate   Float    @default(1.0)
+  totalPen       Float
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  createdAt      DateTime @default(now())
+
+  items PurchaseItem[]
+
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id         String   @id @default(uuid())
+  purchaseId String
+  purchase   Purchase @relation(fields: [purchaseId], references: [id])
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  quantityTm Float
+  bags       Int
+  pricePerTm Float
+  totalPen   Float
+
+  @@map("purchase_items")
+}
+
+model Sale {
+  id             String     @id @default(uuid())
+  proformaNumber String     @unique // N.º de proforma
+  saleDate       DateTime
+  customerId     String
+  customer       Customer   @relation(fields: [customerId], references: [id])
+  status         SaleStatus @default(PENDIENTE)
+  totalAmount    Float
+  paidAmount     Float      @default(0.0)
+  notes          String?
+  userId         String
+  user           User       @relation(fields: [userId], references: [id])
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  items SaleItem[]
+
+  @@map("sales")
+}
+
+model SaleItem {
+  id         String  @id @default(uuid())
+  saleId     String
+  sale       Sale    @relation(fields: [saleId], references: [id])
+  productId  String
+  product    Product @relation(fields: [productId], references: [id])
+  quantity   Float   // Cantidad en TM o Bolsas
+  unitPrice  Float
+  total      Float
+
+  @@map("sale_items")
+}
+
+model InventoryMovement {
+  id            String       @id @default(uuid())
+  productId     String
+  product       Product      @relation(fields: [productId], references: [id])
+  type          MovementType
+  quantityTm    Float
+  quantityBags  Int
+  unitCost      Float        // Costo promedio ponderado en momento del movimiento
+  referenceType String?      // "PURCHASE", "SALE", "MIX_EXECUTION", "AUDIT"
+  referenceId   String?
+  date          DateTime     @default(now())
+  notes         String?
+
+  @@map("inventory_movements")
+}
+
+model MixRecipe {
+  id              String   @id @default(uuid())
+  name            String   // Ej: Formulación NPK Intermedia
+  targetProductId String
+  targetProduct   Product  @relation("TargetProduct", fields: [targetProductId], references: [id])
+  batchSizeTm     Float    @default(10.0)
+  description     String?
+  createdAt       DateTime @default(now())
+
+  items      MixRecipeItem[]
+  executions MixExecution[]
+
+  @@map("mix_recipes")
+}
+
+model MixRecipeItem {
+  id          String    @id @default(uuid())
+  mixRecipeId String
+  mixRecipe   MixRecipe @relation(fields: [mixRecipeId], references: [id])
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id])
+  quantityTm  Float
+
+  @@map("mix_recipe_items")
+}
+
+model MixExecution {
+  id              String   @id @default(uuid())
+  mixRecipeId     String
+  mixRecipe       MixRecipe @relation(fields: [mixRecipeId], references: [id])
+  producedQtyTm   Float
+  producedBags    Int
+  executionDate   DateTime @default(now())
+  proformaNumber  String?  // Si fue preparado directo para una venta
+  notes           String?
+
+  items MixExecutionItem[]
+
+  @@map("mix_executions")
+}
+
+model MixExecutionItem {
+  id             String       @id @default(uuid())
+  mixExecutionId String
+  mixExecution   MixExecution @relation(fields: [mixExecutionId], references: [id])
+  productId      String
+  product        Product      @relation(fields: [productId], references: [id])
+  consumedQtyTm  Float
+  consumedBags   Int
+
+  @@map("mix_execution_items")
+}
+
+model BagStock {
+  id         String   @id @default(uuid())
+  productId  String   @unique
+  product    Product  @relation(fields: [productId], references: [id])
+  bagName    String   // Ej: Bolsas Sulpomag 50kg
+  incoming   Int      @default(0)
+  outgoing   Int      @default(0)
+  current    Int      @default(0)
+  minStock   Int      @default(50)
+  updatedAt  DateTime @updatedAt
+
+  @@map("bag_stocks")
+}
+
+model PhysicalAudit {
+  id         String   @id @default(uuid())
+  auditDate  DateTime @default(now())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  status     String   @default("COMPLETED") // COMPLETED, RECONCILED
+  notes      String?
+
+  items PhysicalAuditItem[]
+
+  @@map("physical_audits")
+}
+
+model PhysicalAuditItem {
+  id              String        @id @default(uuid())
+  physicalAuditId String
+  physicalAudit   PhysicalAudit @relation(fields: [physicalAuditId], references: [id])
+  productId       String
+  product         Product       @relation(fields: [productId], references: [id])
+  systemStockTm   Float
+  physicalCountTm Float
+  differenceTm    Float
+  reconciled      Boolean       @default(false)
+
+  @@map("physical_audit_items")
+}
+
+model CashMovement {
+  id          String   @id @default(uuid())
+  date        DateTime @default(now())
+  type        String   // INGRESOS, EGRESOS
+  category    String   // VENTA, COMPRA, TRANSPORTE, ESTIBA, AGUA, LUZ, PROFORMAS, CINTA, OTROS
+  description String
+  amountPen   Float
+  cashRegister String  @default("CAJA_1") // CAJA_1, CAJA_2
+  referenceId String?
+
+  @@map("cash_movements")
+}
