@@ -5,6 +5,7 @@ import {
   Receipt, FlaskConical, PackageCheck, ClipboardCheck, 
   DollarSign, Users, X, ShieldCheck
 } from 'lucide-react';
+import { Logo } from './ui/Logo';
 
 export const Sidebar: React.FC = () => {
   const { activeTab, setActiveTab, sidebarOpen, setSidebarOpen } = useApp();
@@ -46,8 +47,8 @@ export const Sidebar: React.FC = () => {
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
         {/* Mobile Header with Close Button */}
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between lg:hidden">
-          <img src="/logo-agroperu.png" alt="AGROPERÚ" className="h-7 w-auto object-contain" />
+        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between lg:hidden bg-slate-50 dark:bg-slate-950">
+          <Logo compact={false} className="scale-75 origin-left" />
           <button
             onClick={() => setSidebarOpen(false)}
             className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
@@ -86,16 +87,7 @@ export const Sidebar: React.FC = () => {
           })}
         </nav>
 
-        {/* Bottom PWA / Sync Status */}
-        <div className="p-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50">
-          <div className="flex items-center gap-2 text-xs font-semibold text-slate-800 dark:text-slate-200">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-            <span>Sistema AgroPerú Online</span>
-          </div>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-            Saldos y movimientos sincronizados
-          </p>
-        </div>
+
       </aside>
     </>
   );

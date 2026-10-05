@@ -102,18 +102,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setThemeMode(prev => (prev === 'light' ? 'dark' : 'light'));
   };
 
-  const [products, setProducts] = useState<Product[]>(() => loadLocal('agroperu_products', initialProducts));
-  const [categories] = useState<Category[]>(initialCategories);
-  const [customers, setCustomers] = useState<Customer[]>(() => loadLocal('agroperu_customers', initialCustomers));
-  const [suppliers, setSuppliers] = useState<Supplier[]>(() => loadLocal('agroperu_suppliers', initialSuppliers));
-  const [purchases, setPurchases] = useState<Purchase[]>(() => loadLocal('agroperu_purchases', initialPurchases));
-  const [sales, setSales] = useState<Sale[]>(() => loadLocal('agroperu_sales', initialSales));
-  const [kardex, setKardex] = useState<InventoryMovement[]>(() => loadLocal('agroperu_kardex', initialKardex));
-  const [lots, setLots] = useState<ProductLot[]>(() => loadLocal('agroperu_lots', initialLots));
-  const [mixRecipes, setMixRecipes] = useState<MixRecipe[]>(() => loadLocal('agroperu_recipes', initialRecipes));
-  const [mixExecutions, setMixExecutions] = useState<MixExecution[]>(() => loadLocal('agroperu_executions', initialExecutions));
-  const [emptyBags, setEmptyBags] = useState<EmptyBagStock[]>(() => loadLocal('agroperu_bags', initialBags));
-  const [financials, setFinancials] = useState<FinancialMovement[]>(() => loadLocal('agroperu_financials', initialFinancials));
+  const [products, setProducts] = useState<Product[]>(() => loadLocal('agroperu_products', []));
+  const [categories] = useState<Category[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>(() => loadLocal('agroperu_customers', []));
+  const [suppliers, setSuppliers] = useState<Supplier[]>(() => loadLocal('agroperu_suppliers', []));
+  const [purchases, setPurchases] = useState<Purchase[]>(() => loadLocal('agroperu_purchases', []));
+  const [sales, setSales] = useState<Sale[]>(() => loadLocal('agroperu_sales', []));
+  const [kardex, setKardex] = useState<InventoryMovement[]>(() => loadLocal('agroperu_kardex', []));
+  const [lots, setLots] = useState<ProductLot[]>(() => loadLocal('agroperu_lots', []));
+  const [mixRecipes, setMixRecipes] = useState<MixRecipe[]>(() => loadLocal('agroperu_recipes', []));
+  const [mixExecutions, setMixExecutions] = useState<MixExecution[]>(() => loadLocal('agroperu_executions', []));
+  const [emptyBags, setEmptyBags] = useState<EmptyBagStock[]>(() => loadLocal('agroperu_bags', []));
+  const [financials, setFinancials] = useState<FinancialMovement[]>(() => loadLocal('agroperu_financials', []));
 
   // Reset/seed all system data to rich demo dataset
   const resetToDemoData = () => {
@@ -145,11 +145,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     triggerSuccess('¡Sistema restaurado y poblado con datos de prueba realistas para AgroPerú!');
   };
 
-  // Auto-seed on first load or if dataset was empty
+  // Temporarily clear storage and state on mount to ensure fresh start
   useEffect(() => {
-    const isSeeded = localStorage.getItem('agroperu_demo_seeded_v3');
-    if (!isSeeded || customers.length === 0 || sales.length === 0) {
-      resetToDemoData();
+    if (!localStorage.getItem('agroperu_force_clean_v3')) {
+      const keys = [
+        'agroperu_products', 'agroperu_customers', 'agroperu_suppliers', 
+        'agroperu_purchases', 'agroperu_sales', 'agroperu_kardex', 
+        'agroperu_lots', 'agroperu_recipes', 'agroperu_executions', 
+        'agroperu_bags', 'agroperu_financials', 'agroperu_categories'
+      ];
+      keys.forEach(k => localStorage.removeItem(k));
+      
+      setProducts([]);
+      setCustomers([]);
+      setSuppliers([]);
+      setPurchases([]);
+      setSales([]);
+      setKardex([]);
+      setLots([]);
+      setMixRecipes([]);
+      setMixExecutions([]);
+      setEmptyBags([]);
+      setFinancials([]);
+
+      localStorage.setItem('agroperu_force_clean_v3', 'true');
     }
   }, []);
 
