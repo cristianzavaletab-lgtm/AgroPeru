@@ -9,5 +9,13 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 22
+      - key: VITE_ENABLE_SUPABASE_SYNC
+        value: true
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+      - key: VITE_APP_STATE_ID
+        value: agroperu-main
       - key: DNIRUC_API_TOKEN
         sync: false

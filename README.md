@@ -67,7 +67,13 @@ La aplicación funciona sin Supabase. Para habilitar sincronización remota conf
 VITE_ENABLE_SUPABASE_SYNC=true
 VITE_SUPABASE_URL=https://tu-proyecto.supabase.co
 VITE_SUPABASE_ANON_KEY=tu-clave-publica-anon
+VITE_APP_STATE_ID=agroperu-main
 DATABASE_URL=postgresql://usuario:clave@localhost:5432/agroperu
 ```
+
+Antes del primer despliegue, abre el editor SQL de Supabase y ejecuta `supabase/setup.sql`.
+La tabla `app_state` conserva en un único registro todos los módulos del sistema y los
+sincroniza entre navegadores. En Render, estas variables deben existir durante el build;
+después de cambiarlas ejecuta **Save, rebuild, and deploy**.
 
 La clave anónima de Supabase puede ser pública si las políticas RLS están configuradas correctamente; `DATABASE_URL` y `DNIRUC_API_TOKEN` siempre deben permanecer en el servidor.

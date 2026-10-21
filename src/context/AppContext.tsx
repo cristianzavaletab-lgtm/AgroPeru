@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import {
   Product, Category, Customer, Supplier, Purchase, Sale,
   InventoryMovement, MixRecipe, MixExecution, EmptyBagStock,
@@ -11,7 +11,8 @@ import {
   initialKardex, initialRecipes, initialBags, initialFinancials,
   initialLots, initialExecutions
 } from '../data/mockData';
-import { dbSync } from '../lib/supabaseSync';
+import { AppStateSnapshot, dbSync } from '../lib/supabaseSync';
+import { isSupabaseSyncEnabled } from '../lib/supabase';
 import { toLocalISODate } from '../utils/dateUtils';
 
 const loadLocal = <T,>(key: string, fallback: T): T => {
@@ -139,6 +140,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [emptyBags, setEmptyBags] = useState<EmptyBagStock[]>(() => loadLocal('agroperu_bags', initialBags));
   const [financials, setFinancials] = useState<FinancialMovement[]>(() => loadLocal('agroperu_financials', initialFinancials));
   const [cashClosings, setCashClosings] = useState<CashClosing[]>(() => loadLocal('agroperu_cash_closings', []));
+  const initialSnapshotRef = useRef<AppStateSnapshot>({
+    products, customers, suppliers, purchases, sales, kardex, lots,
+    mixRecipes, mixExecutions, emptyBags, financials, cashClosings,
+  });
+  const remoteSyncReadyRef = useRef(false);
+  const lastRemoteSnapshotRef = useRef('');
 
   // Reset/seed all system data to rich demo dataset
   const resetToDemoData = () => {
@@ -184,26 +191,69 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => { localStorage.setItem('agroperu_financials', JSON.stringify(financials)); }, [financials]);
   useEffect(() => { localStorage.setItem('agroperu_cash_closings', JSON.stringify(cashClosings)); }, [cashClosings]);
 
-  // Sync from Supabase on mount if available
+  // Hydrate every module from one shared Supabase snapshot and listen for changes.
   useEffect(() => {
-    async function loadSupabaseData() {
+    if (!isSupabaseSyncEnabled) return;
+    let active = true;
+    let unsubscribe: () => void = () => undefined;
+
+    const applySnapshot = (snapshot: AppStateSnapshot) => {
+      if (!active) return;
+      lastRemoteSnapshotRef.current = JSON.stringify(snapshot);
+      if (Array.isArray(snapshot.products)) setProducts(snapshot.products);
+      if (Array.isArray(snapshot.customers)) setCustomers(normalizeCustomerNames(snapshot.customers));
+      if (Array.isArray(snapshot.suppliers)) setSuppliers(normalizeSuppliers(snapshot.suppliers));
+      if (Array.isArray(snapshot.purchases)) setPurchases(snapshot.purchases);
+      if (Array.isArray(snapshot.sales)) setSales(snapshot.sales);
+      if (Array.isArray(snapshot.kardex)) setKardex(snapshot.kardex);
+      if (Array.isArray(snapshot.lots)) setLots(snapshot.lots);
+      if (Array.isArray(snapshot.mixRecipes)) setMixRecipes(snapshot.mixRecipes);
+      if (Array.isArray(snapshot.mixExecutions)) setMixExecutions(snapshot.mixExecutions);
+      if (Array.isArray(snapshot.emptyBags)) setEmptyBags(snapshot.emptyBags);
+      if (Array.isArray(snapshot.financials)) setFinancials(snapshot.financials);
+      if (Array.isArray(snapshot.cashClosings)) setCashClosings(snapshot.cashClosings);
+    };
+
+    async function loadSharedState() {
       try {
-        const [remoteProds, remoteCusts, remoteSuppliers, remoteSales] = await Promise.all([
-          dbSync.getProducts(),
-          dbSync.getCustomers(),
-          dbSync.getSuppliers(),
-          dbSync.getSales()
-        ]);
-        if (remoteProds && remoteProds.length > 0) setProducts(remoteProds);
-        if (remoteCusts && remoteCusts.length > 0) setCustomers(normalizeCustomerNames(remoteCusts));
-        if (remoteSuppliers && remoteSuppliers.length > 0) setSuppliers(normalizeSuppliers(remoteSuppliers));
-        if (remoteSales && remoteSales.length > 0) setSales(remoteSales);
+        const remoteState = await dbSync.getAppState();
+        if (!active) return;
+        if (remoteState) {
+          applySnapshot(remoteState);
+        } else {
+          await dbSync.saveAppState(initialSnapshotRef.current);
+          lastRemoteSnapshotRef.current = JSON.stringify(initialSnapshotRef.current);
+        }
+        remoteSyncReadyRef.current = true;
+        unsubscribe = dbSync.subscribeToAppState(applySnapshot);
       } catch (err) {
-        console.warn('Supabase remote load skipped, using local data:', err);
+        console.warn('No se pudo cargar el estado compartido de Supabase:', err);
       }
     }
-    loadSupabaseData();
+
+    void loadSharedState();
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, []);
+
+  // Persist local changes as one atomic snapshot after the remote hydration finishes.
+  useEffect(() => {
+    if (!isSupabaseSyncEnabled || !remoteSyncReadyRef.current) return;
+    const snapshot: AppStateSnapshot = {
+      products, customers, suppliers, purchases, sales, kardex, lots,
+      mixRecipes, mixExecutions, emptyBags, financials, cashClosings,
+    };
+    const serialized = JSON.stringify(snapshot);
+    if (serialized === lastRemoteSnapshotRef.current) return;
+    const timer = window.setTimeout(() => {
+      void dbSync.saveAppState(snapshot)
+        .then(() => { lastRemoteSnapshotRef.current = serialized; })
+        .catch(error => console.warn('No se pudo guardar el estado compartido:', error));
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [products, customers, suppliers, purchases, sales, kardex, lots, mixRecipes, mixExecutions, emptyBags, financials, cashClosings]);
 
   const triggerSuccess = (msg: string) => {
     setSuccessMessage(msg);

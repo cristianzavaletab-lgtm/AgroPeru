@@ -1,7 +1,65 @@
 import { isSupabaseSyncEnabled, supabase } from './supabase';
-import { Product, Customer, Supplier, Sale, InventoryMovement } from '../types';
+import {
+  Product, Customer, Supplier, Purchase, Sale, InventoryMovement,
+  MixRecipe, MixExecution, EmptyBagStock, FinancialMovement,
+  ProductLot, CashClosing
+} from '../types';
+
+export interface AppStateSnapshot {
+  products: Product[];
+  customers: Customer[];
+  suppliers: Supplier[];
+  purchases: Purchase[];
+  sales: Sale[];
+  kardex: InventoryMovement[];
+  lots: ProductLot[];
+  mixRecipes: MixRecipe[];
+  mixExecutions: MixExecution[];
+  emptyBags: EmptyBagStock[];
+  financials: FinancialMovement[];
+  cashClosings: CashClosing[];
+}
+
+const stateId = import.meta.env.VITE_APP_STATE_ID || 'agroperu-main';
 
 export const dbSync = {
+  async getAppState(): Promise<AppStateSnapshot | null> {
+    if (!isSupabaseSyncEnabled) return null;
+    const { data, error } = await supabase
+      .from('app_state')
+      .select('payload')
+      .eq('id', stateId)
+      .maybeSingle();
+    if (error) throw error;
+    return data?.payload as AppStateSnapshot | null;
+  },
+
+  async saveAppState(payload: AppStateSnapshot): Promise<void> {
+    if (!isSupabaseSyncEnabled) return;
+    const { error } = await supabase.from('app_state').upsert({
+      id: stateId,
+      payload,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) throw error;
+  },
+
+  subscribeToAppState(onChange: (payload: AppStateSnapshot) => void): () => void {
+    if (!isSupabaseSyncEnabled) return () => undefined;
+    const channel = supabase
+      .channel(`app-state-${stateId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'app_state', filter: `id=eq.${stateId}` },
+        event => {
+          const payload = (event.new as { payload?: AppStateSnapshot } | null)?.payload;
+          if (payload) onChange(payload);
+        }
+      )
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  },
+
   // Products
   async getProducts(): Promise<Product[] | null> {
     if (!isSupabaseSyncEnabled) return null;
