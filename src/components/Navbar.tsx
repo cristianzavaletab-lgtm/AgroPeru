@@ -2,15 +2,21 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
   Bell, Smartphone, Sun, Moon,
-  Menu, X, CheckCircle2, ShieldCheck
+  Menu, X, CheckCircle2, ShieldCheck, Download
 } from 'lucide-react';
 import { Logo } from './ui/Logo';
+import { usePwaInstall } from '../hooks/usePwaInstall';
+import { InstallAppModal } from './Common/InstallAppModal';
 
 export const Navbar: React.FC = () => {
   const { 
     products, emptyBags, themeMode, toggleTheme, 
     sidebarOpen, setSidebarOpen, activeTab
   } = useApp();
+  const { 
+    isInstalled, deferredPrompt, showInstallModal, 
+    setShowInstallModal, triggerInstall 
+  } = usePwaInstall();
   const [showNotifications, setShowNotifications] = useState(false);
   const [alertsAcknowledged, setAlertsAcknowledged] = useState(false);
 
@@ -65,14 +71,19 @@ export const Navbar: React.FC = () => {
         <div className="flex items-center gap-2 sm:gap-3">
 
 
-          {/* PWA Install Button */}
+          {/* Download / Install App Button */}
           <button
-            onClick={() => alert("Para instalar AgroPerú ERP en tu dispositivo: Haz clic en el menú del navegador (tres puntos) y selecciona 'Instalar aplicación' o 'Agregar a la pantalla de inicio'.")}
-            className="hidden xl:flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border border-slate-200 dark:border-slate-700 cursor-pointer"
-            title="Instalar como PWA"
+            onClick={triggerInstall}
+            className="flex items-center gap-1.5 text-xs font-semibold px-2.5 sm:px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 transition-all shadow-xs cursor-pointer hover:shadow-sm"
+            title="Descargar aplicación con acceso directo en tu equipo"
           >
-            <Smartphone className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            <span>Instalar PWA</span>
+            <Download className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span className="hidden sm:inline">
+              {isInstalled ? 'App instalada' : 'Descargar aplicación'}
+            </span>
+            <span className="sm:hidden">
+              {isInstalled ? 'Instalada' : 'Descargar'}
+            </span>
           </button>
 
           {/* Theme Toggle */}
@@ -171,6 +182,14 @@ export const Navbar: React.FC = () => {
 
         </div>
       </div>
+
+      <InstallAppModal
+        isOpen={showInstallModal}
+        onClose={() => setShowInstallModal(false)}
+        onInstall={triggerInstall}
+        canPrompt={Boolean(deferredPrompt)}
+        isInstalled={isInstalled}
+      />
     </header>
   );
 };

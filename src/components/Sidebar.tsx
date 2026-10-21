@@ -3,12 +3,18 @@ import { useApp } from '../context/AppContext';
 import { 
   LayoutDashboard, Package, History, ShoppingCart, 
   Receipt, FlaskConical, PackageCheck, ClipboardCheck, 
-  DollarSign, Users, X, Building2
+  DollarSign, Users, X, Building2, Download
 } from 'lucide-react';
 import { Logo } from './ui/Logo';
+import { usePwaInstall } from '../hooks/usePwaInstall';
+import { InstallAppModal } from './Common/InstallAppModal';
 
 export const Sidebar: React.FC = () => {
   const { activeTab, setActiveTab, sidebarOpen, setSidebarOpen } = useApp();
+  const { 
+    isInstalled, deferredPrompt, showInstallModal, 
+    setShowInstallModal, triggerInstall 
+  } = usePwaInstall();
 
   const menuItems = [
     { id: 'dashboard', label: 'Panel General', icon: LayoutDashboard },
@@ -90,7 +96,27 @@ export const Sidebar: React.FC = () => {
           })}
         </nav>
 
+        {/* Download App Banner */}
+        <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/50">
+          <button
+            onClick={() => {
+              setSidebarOpen(false);
+              triggerInstall();
+            }}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white text-xs font-semibold shadow-xs transition-all cursor-pointer"
+          >
+            <Download className="w-4 h-4 shrink-0" />
+            <span>{isInstalled ? 'App instalada' : 'Descargar aplicación'}</span>
+          </button>
+        </div>
 
+        <InstallAppModal
+          isOpen={showInstallModal}
+          onClose={() => setShowInstallModal(false)}
+          onInstall={triggerInstall}
+          canPrompt={Boolean(deferredPrompt)}
+          isInstalled={isInstalled}
+        />
       </aside>
     </>
   );
