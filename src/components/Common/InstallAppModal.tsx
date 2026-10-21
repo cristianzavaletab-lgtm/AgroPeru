@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   Download, Monitor, Smartphone, CheckCircle2, 
-  X, ArrowRight, Sparkles, ExternalLink 
+  X, Sparkles
 } from 'lucide-react';
 
 interface InstallAppModalProps {

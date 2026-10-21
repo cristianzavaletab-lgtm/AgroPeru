@@ -87,7 +87,7 @@ interface AppContextType {
   deleteSale: (saleId: string) => boolean;
   updateSaleStatus: (saleId: string, newStatus: Sale['status']) => void;
   updateSale: (saleId: string, sale: Partial<Sale>) => void;
-  issueSaleDocument: (saleId: string, kind: SaleDocumentKind) => void;
+  issueSaleDocument: (saleId: string, kind: SaleDocumentKind) => Sale | null;
   executeMix: (recipeId: string, producedQtyTm: number, proformaNumber?: string) => boolean;
   addRecipe: (recipe: Omit<MixRecipe, 'id'>) => void;
   deleteRecipe: (id: string) => boolean;
@@ -337,6 +337,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return p;
     }));
+    if (updatedFields.name) {
+      const normalizedName = updatedFields.name.trim().toUpperCase();
+      setLots(prev => prev.map(lot => lot.productId === id ? { ...lot, productName: normalizedName } : lot));
+      setMixRecipes(prev => prev.map(recipe => ({
+        ...recipe,
+        targetProductName: recipe.targetProductId === id ? normalizedName : recipe.targetProductName,
+        ingredients: recipe.ingredients.map(ingredient => ingredient.productId === id ? { ...ingredient, productName: normalizedName } : ingredient),
+      })));
+    }
     triggerSuccess(`Producto actualizado correctamente.`);
     return true;
   };
@@ -345,6 +354,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteProduct = (productId: string): boolean => {
     const prod = products.find(p => p.id === productId);
     if (!prod) return false;
+
+    const hasHistory = purchases.some(purchase => purchase.items.some(item => item.productId === productId))
+      || sales.some(sale => sale.items.some(item => item.productId === productId))
+      || kardex.some(movement => movement.productId === productId)
+      || mixRecipes.some(recipe => recipe.targetProductId === productId || recipe.ingredients.some(item => item.productId === productId));
+    if (hasHistory) {
+      triggerError(`No se puede eliminar '${prod.name}' porque tiene movimientos. Edítalo y desmarca “Activo en catálogo” para conservar la trazabilidad.`);
+      return false;
+    }
 
     setProducts(prev => prev.filter(p => p.id !== productId));
     setLots(prev => prev.filter(l => l.productId !== productId));
@@ -818,19 +836,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const issueSaleDocument = (saleId: string, kind: SaleDocumentKind) => {
-    if (!sales.some(s => s.id === saleId)) return;
-    const sequence = String(sales.filter(s => s.documentType === kind).length + 1).padStart(8, '0');
+    const sale = sales.find(item => item.id === saleId);
+    if (!sale) return null;
+    if (sale.documentType === kind && sale.documentNumber) {
+      triggerSuccess(`${kind} ${sale.documentNumber} ya estaba generado.`);
+      return sale;
+    }
+    const lastSequence = sales
+      .filter(item => item.documentType === kind && item.documentNumber)
+      .reduce((max, item) => {
+        const parts = item.documentNumber?.split('-') || [];
+        return Math.max(max, Number(parts[parts.length - 1]) || 0);
+      }, 0);
+    const sequence = String(lastSequence + 1).padStart(8, '0');
     const series = kind === 'FACTURA' ? 'F001' : kind === 'BOLETA' ? 'B001' : kind === 'PROFORMA' ? 'P001' : '';
-    setSales(prev => prev.map(s => s.id === saleId ? {
-      ...s,
+    const issuedSale: Sale = {
+      ...sale,
       documentType: kind,
       documentSeries: series || undefined,
       documentNumber: series ? `${series}-${sequence}` : undefined,
       sunatStatus: kind === 'FACTURA' || kind === 'BOLETA' ? 'PENDIENTE' : 'NO_APLICA'
-    } : s));
+    };
+    setSales(prev => prev.map(item => item.id === saleId ? issuedSale : item));
     triggerSuccess(kind === 'SIN_COMPROBANTE'
       ? 'Venta marcada sin comprobante.'
-      : `${kind === 'PROFORMA' ? 'Proforma' : 'Comprobante'} generado. ${kind === 'FACTURA' || kind === 'BOLETA' ? 'Queda pendiente de envío a SUNAT.' : ''}`);
+      : `${kind === 'PROFORMA' ? 'Proforma' : 'Comprobante de prueba'} generado. ${kind === 'FACTURA' || kind === 'BOLETA' ? 'Aún no fue enviado a SUNAT.' : ''}`);
+    return issuedSale;
   };
 
   // Execute Mixture Production (SIMULTANEOUS PREPARADO SALIDA & PREPARADO INGRESO)

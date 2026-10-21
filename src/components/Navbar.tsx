@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
-  Bell, Smartphone, Sun, Moon,
+  Bell, Sun, Moon,
   Menu, X, CheckCircle2, ShieldCheck, Download
 } from 'lucide-react';
 import { Logo } from './ui/Logo';

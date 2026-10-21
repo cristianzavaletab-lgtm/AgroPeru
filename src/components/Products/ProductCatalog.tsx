@@ -51,6 +51,9 @@ export const ProductCatalog: React.FC = () => {
   const tmFromBags = (bags: number, bagKg: number) => parseFloat((bags * bagKg / 1000).toFixed(3));
   const bagsFromTm = (tm: number, bagKg: number) => Math.round(tm * 1000 / bagKg);
   const minStockBags = bagsFromTm(formData.minStockTm, formData.bagWeightKg);
+  const purchasePerBag = formData.purchasePricePen * formData.bagWeightKg / 1000;
+  const salePerBag = formData.salePricePen * formData.bagWeightKg / 1000;
+  const marginPerBag = salePerBag - purchasePerBag;
 
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -87,9 +90,19 @@ export const ProductCatalog: React.FC = () => {
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.code) return;
+    if (formData.bagWeightKg <= 0) return;
+    if (formData.salePricePen < formData.purchasePricePen) {
+      const confirmed = window.confirm('El precio de venta es menor que el precio de compra. ¿Deseas guardar el producto con margen negativo?');
+      if (!confirmed) return;
+    }
+    const normalized = {
+      ...formData,
+      code: formData.code.trim().toUpperCase(),
+      name: formData.name.trim().toUpperCase(),
+    };
     const success = editingProduct
-      ? updateProduct(editingProduct.id, formData)
-      : addProduct(formData);
+      ? updateProduct(editingProduct.id, normalized)
+      : addProduct(normalized);
     if (success) setShowModal(false);
   };
 
@@ -330,7 +343,7 @@ export const ProductCatalog: React.FC = () => {
                 <th className="px-4 py-3">Producto</th>
                 <th className="px-4 py-3">Categoría</th>
                 <th className="px-4 py-3">Stock TM</th>
-                <th className="px-4 py-3">Bolsas (50kg)</th>
+                <th className="px-4 py-3">Bolsas disponibles</th>
                 <th className="px-4 py-3">P. Compra (TM)</th>
                 <th className="px-4 py-3">P. Venta (TM)</th>
                 <th className="px-4 py-3 text-right">Acciones</th>
@@ -355,11 +368,10 @@ export const ProductCatalog: React.FC = () => {
                     </td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{cat?.name || 'General'}</td>
                     <td className="px-4 py-3 font-semibold font-mono">
-                      <span className={isLow ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-slate-100'}>
-                        {prod.currentStockTm.toFixed(2)} TM
-                      </span>
+                      <span className={isLow ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-slate-100'}>{prod.currentStockTm.toFixed(3)} TM</span>
+                      <div className={`mt-1 text-[10px] font-sans font-semibold ${prod.currentStockTm === 0 ? 'text-rose-600' : isLow ? 'text-amber-600' : 'text-emerald-600'}`}>{prod.currentStockTm === 0 ? 'Sin stock recibido' : isLow ? 'Stock bajo' : 'Stock disponible'}</div>
                     </td>
-                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400 font-mono">{prod.currentBags} u</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400"><div className="font-mono font-semibold">{prod.currentBags} bolsas</div><div className="mt-1 text-[10px]">{prod.bagWeightKg} kg por bolsa</div></td>
                     <td className="px-4 py-3 text-slate-700 dark:text-slate-300 font-mono">S/ {prod.purchasePricePen.toLocaleString('es-PE', { minimumFractionDigits: 2 })}</td>
                     <td className="px-4 py-3 font-semibold text-slate-900 dark:text-slate-100 font-mono">S/ {prod.salePricePen.toLocaleString('es-PE', { minimumFractionDigits: 2 })}</td>
                     <td className="px-4 py-3 text-right">
@@ -468,6 +480,8 @@ export const ProductCatalog: React.FC = () => {
             </div>
 
             <form onSubmit={handleSave} className="space-y-4">
+              {editingProduct && <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200"><strong>Stock actual: {editingProduct.currentBags} bolsas · {editingProduct.currentStockTm.toFixed(3)} TM.</strong><div className="mt-1">Aquí editas la ficha y los precios. El stock solo cambia con compras recibidas, ventas o conteo físico.</div></div>}
+              <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">1. Identificación del producto</div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-slate-700 dark:text-slate-300 block mb-1">Código / SKU *</label>
@@ -493,7 +507,7 @@ export const ProductCatalog: React.FC = () => {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-slate-700 dark:text-slate-300 block mb-1">Nombre del Producto</label>
+                <label className="text-xs font-medium text-slate-700 dark:text-slate-300 block mb-1">Nombre comercial *</label>
                 <input
                   type="text"
                   required
@@ -504,7 +518,8 @@ export const ProductCatalog: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">2. Presentación y control de stock</div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div>
                   <label className="text-xs font-medium text-slate-700 dark:text-slate-300 block mb-1">Unidad</label>
                   <select
@@ -519,7 +534,7 @@ export const ProductCatalog: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300 block mb-1">Peso/Bolsa (kg)</label>
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300 block mb-1">Peso por bolsa (kg)</label>
                   <input
                     type="number"
                     value={formData.bagWeightKg}
@@ -528,7 +543,7 @@ export const ProductCatalog: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300 block mb-1">Stock Mínimo</label>
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300 block mb-1">Alerta de stock mínimo</label>
                   <div className="flex gap-1">
                     <div className="relative flex-1">
                       <input
@@ -557,7 +572,7 @@ export const ProductCatalog: React.FC = () => {
               {/* Prices with TM + bolsa dual inputs */}
               <div className="space-y-2">
                 <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                  Precios — edita por TM o por bolsa (se sincronizan automáticamente)
+                  3. Precios — puedes editar por TM o por bolsa
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   {/* Purchase price */}
@@ -617,6 +632,8 @@ export const ProductCatalog: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              <div className={`rounded-xl border p-3 text-xs ${marginPerBag >= 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-rose-200 bg-rose-50 text-rose-900'}`}><strong>Margen estimado por bolsa: S/ {marginPerBag.toFixed(2)}</strong><div className="mt-1">Compra S/ {purchasePerBag.toFixed(2)} · Venta S/ {salePerBag.toFixed(2)} · No modifica el stock actual.</div></div>
 
               <div className="flex items-center gap-4 pt-1">
                 <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700 dark:text-slate-300">

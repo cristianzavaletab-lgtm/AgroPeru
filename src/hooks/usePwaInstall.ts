@@ -23,11 +23,6 @@ export function usePwaInstall() {
   const [showInstallModal, setShowInstallModal] = useState<boolean>(false);
 
   useEffect(() => {
-    // Si ya fue capturado antes de montar el componente
-    if ((window as any).__pwaInstallPrompt) {
-      setDeferredPrompt((window as any).__pwaInstallPrompt);
-    }
-
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       (window as any).__pwaInstallPrompt = e;
