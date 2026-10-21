@@ -1,3 +1,5 @@
+import { toLocalISODate } from './dateUtils';
+
 /**
  * Utility functions for exporting system data to CSV / Excel
  */
@@ -31,7 +33,7 @@ export function exportToCSV(data: Record<string, any>[], filename: string) {
   
   const link = document.createElement('a');
   link.setAttribute('href', url);
-  link.setAttribute('download', `${filename}_${new Date().toISOString().split('T')[0]}.csv`);
+  link.setAttribute('download', `${filename}_${toLocalISODate()}.csv`);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

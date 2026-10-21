@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { MixRecipe } from '../../types';
-import { FlaskConical, Plus, Play, CheckCircle2, AlertCircle, Layers, ArrowRight, Trash2, PlusCircle, X } from 'lucide-react';
+import { FlaskConical, Plus, Play, Layers, Trash2, X } from 'lucide-react';
 
 export const MixStudio: React.FC = () => {
   const { mixRecipes, products, executeMix, addRecipe, quickAddProduct } = useApp();

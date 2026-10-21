@@ -109,7 +109,7 @@ export const initialCustomers: Customer[] = [
   },
   {
     id: 'cust-5',
-    name: 'Don Jorge Alva Rivas',
+    name: 'Don Jorge',
     lastName: 'Alva Rivas',
     docType: 'DNI',
     docNumber: '10428912',
@@ -160,7 +160,7 @@ export const initialCustomers: Customer[] = [
   },
   {
     id: 'cust-8',
-    name: 'Don Víctor Mendoza Chuy',
+    name: 'Don Víctor',
     lastName: 'Mendoza Chuy',
     docType: 'DNI',
     docNumber: '08923415',
@@ -178,11 +178,11 @@ export const initialCustomers: Customer[] = [
 ];
 
 export const initialSuppliers: Supplier[] = [
-  { id: 'supp-1', companyName: 'INTI Agroquímicos S.A.C.', ruc: '20100492817', contactName: 'Ing. Carlos Mendoza', phone: '014829300', address: 'Av. Industrial 450, Callao - Lima' },
-  { id: 'supp-2', companyName: 'Fertilizantes del Perú S.A.', ruc: '20501928371', contactName: 'Mariela Torres', phone: '016192800', address: 'Av. Argentina 2040, Lima' },
-  { id: 'supp-3', companyName: 'Molinos Agro S.A.', ruc: '20492810394', contactName: 'Roberto Gómez', phone: '013158000', address: 'Panamericana Sur Km 18, Lurín' },
-  { id: 'supp-4', companyName: 'YARA Perú S.R.L.', ruc: '20382910482', contactName: 'Ing. Alfonso Ruiz', phone: '012114000', address: 'Av. Víctor Andrés Belaúnde 147, San Isidro' },
-  { id: 'supp-5', companyName: 'Equipak S.A.C.', ruc: '20519283746', contactName: 'Carmen Vásquez', phone: '014942000', address: 'Av. Separatadora Industrial 1820, Ate' }
+  { id: 'supp-1', companyName: 'INTI Agroquímicos S.A.C.', docType: 'RUC', ruc: '20100492817', contactName: 'Ing. Carlos Mendoza', phone: '014829300', address: 'Av. Industrial 450, Callao - Lima' },
+  { id: 'supp-2', companyName: 'Fertilizantes del Perú S.A.', docType: 'RUC', ruc: '20501928371', contactName: 'Mariela Torres', phone: '016192800', address: 'Av. Argentina 2040, Lima' },
+  { id: 'supp-3', companyName: 'Molinos Agro S.A.', docType: 'RUC', ruc: '20492810394', contactName: 'Roberto Gómez', phone: '013158000', address: 'Panamericana Sur Km 18, Lurín' },
+  { id: 'supp-4', companyName: 'YARA Perú S.R.L.', docType: 'RUC', ruc: '20382910482', contactName: 'Ing. Alfonso Ruiz', phone: '012114000', address: 'Av. Víctor Andrés Belaúnde 147, San Isidro' },
+  { id: 'supp-5', companyName: 'Equipak S.A.C.', docType: 'RUC', ruc: '20519283746', contactName: 'Carmen Vásquez', phone: '014942000', address: 'Av. Separatadora Industrial 1820, Ate' }
 ];
 
 export const initialLots: ProductLot[] = [

@@ -1,12 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { exportToCSV } from '../../utils/exportUtils';
+import { toLocalISODate } from '../../utils/dateUtils';
 import { 
   Table, Search, ArrowUpRight, ArrowDownLeft, RefreshCw, 
-  ChevronLeft, ChevronRight, Layers, Calendar, Filter, 
-  CheckCircle2, AlertTriangle, Tag, Trash2, Clock, FileSpreadsheet
+  ChevronLeft, ChevronRight, Calendar,
+  AlertTriangle, Tag, Clock, FileSpreadsheet
 } from 'lucide-react';
-import { InventoryMovement } from '../../types';
 
 const MOVEMENT_LABELS: Record<string, string> = {
   INITIAL_STOCK: 'Stock Inicial',
@@ -20,7 +20,7 @@ const MOVEMENT_LABELS: Record<string, string> = {
 };
 
 export const KardexViewer: React.FC = () => {
-  const { kardex, products, lots, reconcileAudit, clearProductCount } = useApp();
+  const { kardex, products, lots, reconcileAudit } = useApp();
   const [viewMode, setViewMode] = useState<'MATRIX' | 'LOTS' | 'LOG'>('MATRIX');
   
   // Search and general filters
@@ -52,11 +52,11 @@ export const KardexViewer: React.FC = () => {
   );
 
   // Date Helper Calculations
-  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayStr = useMemo(() => toLocalISODate(), []);
   const yesterdayStr = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() - 1);
-    return d.toISOString().split('T')[0];
+    return toLocalISODate(d);
   }, []);
 
   const handleQuickDateFilter = (mode: 'ALL' | 'TODAY' | 'YESTERDAY' | 'RANGE') => {

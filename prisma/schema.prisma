@@ -44,6 +44,34 @@ enum DocumentType {
   GUIA
 }
 
+enum PaymentMethod {
+  EFECTIVO
+  YAPE
+  TRANSFERENCIA
+  CREDITO
+}
+
+enum SaleDocumentKind {
+  SIN_COMPROBANTE
+  PROFORMA
+  BOLETA
+  FACTURA
+}
+
+enum SunatStatus {
+  NO_APLICA
+  PENDIENTE
+  ACEPTADO
+  RECHAZADO
+}
+
+enum PurchaseStatus {
+  PENDIENTE_RECOJO
+  EN_TRANSITO
+  RECIBIDO
+  CANCELADO
+}
+
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
@@ -100,13 +128,24 @@ model Product {
 model Customer {
   id             String   @id @default(uuid())
   name           String
+  lastName       String?
   docType        DocumentType @default(DNI)
   docNumber      String   @unique
   phone          String?
+  alternatePhone String?
+  email          String?
+  contactName    String?
   address        String?
+  location       String?
+  cropType       String?
+  hectares       Float?
+  soilRiegoType  String?
+  nextApplicationDate DateTime?
+  notes          String?
   creditLimit    Float    @default(0.0)
   currentDebt    Float    @default(0.0)
   createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   sales Sale[]
 
@@ -116,11 +155,18 @@ model Customer {
 model Supplier {
   id          String   @id @default(uuid())
   companyName String
+  docType     DocumentType @default(RUC)
   ruc         String   @unique
   contactName String?
   phone       String?
+  alternatePhone String?
   address     String?
+  email       String?
+  website     String?
+  notes       String?
+  active      Boolean  @default(true)
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   purchases Purchase[]
 
@@ -133,16 +179,41 @@ model Purchase {
   supplier       Supplier @relation(fields: [supplierId], references: [id])
   docNumber      String   // Boleta / Factura
   purchaseDate   DateTime
+  currency       String   @default("PEN")
   freightCostPen Float    @default(0.0) // Costo envío
   exchangeRate   Float    @default(1.0)
   totalPen       Float
+  status         PurchaseStatus @default(PENDIENTE_RECOJO)
+  paymentStatus  String   @default("PENDIENTE")
+  paymentMethod  PaymentMethod?
+  paidAmount     Float    @default(0.0)
+  expectedPickupDate DateTime?
+  receivedDate   DateTime?
+  inventoryPosted Boolean @default(false)
+  notes          String?
   userId         String
   user           User     @relation(fields: [userId], references: [id])
   createdAt      DateTime @default(now())
 
-  items PurchaseItem[]
+  items    PurchaseItem[]
+  freights PurchaseFreight[]
 
   @@map("purchases")
+}
+
+model PurchaseFreight {
+  id            String   @id @default(uuid())
+  purchaseId    String
+  purchase      Purchase @relation(fields: [purchaseId], references: [id])
+  origin        String
+  destination   String?
+  carrier       String?
+  amountPen     Float
+  status        String   @default("PENDIENTE")
+  paymentMethod PaymentMethod?
+  notes         String?
+
+  @@map("purchase_freights")
 }
 
 model PurchaseItem {
@@ -169,6 +240,13 @@ model Sale {
   totalAmount    Float
   paidAmount     Float      @default(0.0)
   notes          String?
+  paymentMethod  PaymentMethod?
+  documentType   SaleDocumentKind @default(SIN_COMPROBANTE)
+  documentSeries String?
+  documentNumber String?
+  sunatStatus    SunatStatus @default(NO_APLICA)
+  dueDate        DateTime?
+  deliveryStatus String @default("PENDIENTE")
   userId         String
   user           User       @relation(fields: [userId], references: [id])
   createdAt      DateTime   @default(now())
@@ -311,6 +389,23 @@ model CashMovement {
   amountPen   Float
   cashRegister String  @default("CAJA_1") // CAJA_1, CAJA_2
   referenceId String?
+  paymentMethod PaymentMethod?
 
   @@map("cash_movements")
+}
+
+model CashClosing {
+  id           String   @id @default(uuid())
+  createdAt    DateTime @default(now())
+  dateFrom     DateTime
+  dateTo       DateTime
+  label        String
+  incomePen    Float
+  expensePen   Float
+  balancePen   Float
+  salesPen     Float
+  purchasesPen Float
+  notes        String?
+
+  @@map("cash_closings")
 }

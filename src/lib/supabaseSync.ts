@@ -1,9 +1,10 @@
-import { supabase } from './supabase';
-import { Product, Customer, Supplier, Purchase, Sale, InventoryMovement, MixRecipe, FinancialMovement } from '../types';
+import { isSupabaseSyncEnabled, supabase } from './supabase';
+import { Product, Customer, Supplier, Sale, InventoryMovement } from '../types';
 
 export const dbSync = {
   // Products
   async getProducts(): Promise<Product[] | null> {
+    if (!isSupabaseSyncEnabled) return null;
     try {
       const { data, error } = await supabase.from('products').select('*');
       if (error || !data || data.length === 0) return null;
@@ -34,6 +35,7 @@ export const dbSync = {
   },
 
   async saveProduct(p: Product) {
+    if (!isSupabaseSyncEnabled) return;
     try {
       await supabase.from('products').upsert({
         id: p.id,
@@ -63,6 +65,7 @@ export const dbSync = {
 
   // Customers
   async getCustomers(): Promise<Customer[] | null> {
+    if (!isSupabaseSyncEnabled) return null;
     try {
       const { data, error } = await supabase.from('customers').select('*');
       if (error || !data || data.length === 0) return null;
@@ -73,6 +76,9 @@ export const dbSync = {
         docType: c.doc_type,
         docNumber: c.doc_number,
         phone: c.phone,
+        alternatePhone: c.alternate_phone,
+        email: c.email,
+        contactName: c.contact_name,
         address: c.address,
         location: c.location,
         cropType: c.crop_type,
@@ -89,6 +95,7 @@ export const dbSync = {
   },
 
   async saveCustomer(c: Customer) {
+    if (!isSupabaseSyncEnabled) return;
     try {
       await supabase.from('customers').upsert({
         id: c.id,
@@ -97,6 +104,9 @@ export const dbSync = {
         doc_type: c.docType,
         doc_number: c.docNumber,
         phone: c.phone,
+        alternate_phone: c.alternatePhone,
+        email: c.email,
+        contact_name: c.contactName,
         address: c.address,
         location: c.location,
         crop_type: c.cropType,
@@ -112,8 +122,65 @@ export const dbSync = {
     }
   },
 
+  // Suppliers
+  async getSuppliers(): Promise<Supplier[] | null> {
+    if (!isSupabaseSyncEnabled) return null;
+    try {
+      const { data, error } = await supabase.from('suppliers').select('*');
+      if (error || !data || data.length === 0) return null;
+      return data.map((supplier: any) => ({
+        id: supplier.id,
+        companyName: supplier.company_name,
+        docType: supplier.doc_type || (String(supplier.ruc || '').length === 8 ? 'DNI' : 'RUC'),
+        ruc: String(supplier.ruc || ''),
+        contactName: supplier.contact_name,
+        phone: supplier.phone,
+        alternatePhone: supplier.alternate_phone,
+        address: supplier.address,
+        email: supplier.email,
+        website: supplier.website,
+        notes: supplier.notes,
+        active: supplier.active !== false,
+      }));
+    } catch {
+      return null;
+    }
+  },
+
+  async saveSupplier(supplier: Supplier) {
+    if (!isSupabaseSyncEnabled) return;
+    try {
+      await supabase.from('suppliers').upsert({
+        id: supplier.id,
+        company_name: supplier.companyName,
+        doc_type: supplier.docType,
+        ruc: supplier.ruc,
+        contact_name: supplier.contactName,
+        phone: supplier.phone,
+        alternate_phone: supplier.alternatePhone,
+        address: supplier.address,
+        email: supplier.email,
+        website: supplier.website,
+        notes: supplier.notes,
+        active: supplier.active !== false,
+      });
+    } catch (error) {
+      console.warn('Supabase supplier sync error:', error);
+    }
+  },
+
+  async deleteSupplier(id: string) {
+    if (!isSupabaseSyncEnabled) return;
+    try {
+      await supabase.from('suppliers').delete().eq('id', id);
+    } catch (error) {
+      console.warn('Supabase supplier delete error:', error);
+    }
+  },
+
   // Sales
   async getSales(): Promise<Sale[] | null> {
+    if (!isSupabaseSyncEnabled) return null;
     try {
       const { data, error } = await supabase.from('sales').select('*').order('sale_date', { ascending: false });
       if (error || !data || data.length === 0) return null;
@@ -135,6 +202,7 @@ export const dbSync = {
   },
 
   async saveSale(s: Sale) {
+    if (!isSupabaseSyncEnabled) return;
     try {
       await supabase.from('sales').upsert({
         id: s.id,
@@ -155,6 +223,7 @@ export const dbSync = {
 
   // Kardex
   async saveKardexMovement(m: InventoryMovement) {
+    if (!isSupabaseSyncEnabled) return;
     try {
       await supabase.from('kardex_movements').upsert({
         id: m.id,

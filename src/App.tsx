@@ -12,6 +12,7 @@ import { BagInventory } from './components/Bags/BagInventory';
 import { PhysicalCountModal } from './components/Audit/PhysicalCountModal';
 import { FinancialReports } from './components/Reports/FinancialReports';
 import { CustomerCRM } from './components/Customers/CustomerCRM';
+import { SupplierManager } from './components/Suppliers/SupplierManager';
 import { AlertCircle, CheckCircle2, Loader2, X } from 'lucide-react';
 
 const NotificationBanner: React.FC = () => {
@@ -81,6 +82,7 @@ const MainContent: React.FC = () => {
       {activeTab === 'mixes' && <MixStudio />}
       {activeTab === 'kardex' && <KardexViewer />}
       {activeTab === 'customers' && <CustomerCRM />}
+      {activeTab === 'suppliers' && <SupplierManager />}
       {activeTab === 'products' && <ProductCatalog />}
       {activeTab === 'bags' && <BagInventory />}
       {activeTab === 'audit' && <PhysicalCountModal />}

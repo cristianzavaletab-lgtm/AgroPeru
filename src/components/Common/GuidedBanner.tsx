@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lightbulb, ChevronUp, ChevronDown, BookOpen, HelpCircle } from 'lucide-react';
+import { Lightbulb, ChevronUp, ChevronDown } from 'lucide-react';
 
 interface GuidedBannerProps {
   title: string;

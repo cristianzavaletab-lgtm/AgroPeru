@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
-  Bell, Smartphone, User, Sun, Moon, 
-  Menu, X, CheckCircle2, AlertTriangle, ShieldCheck, Database
+  Bell, Smartphone, Sun, Moon,
+  Menu, X, CheckCircle2, ShieldCheck
 } from 'lucide-react';
 import { Logo } from './ui/Logo';
 
 export const Navbar: React.FC = () => {
   const { 
     products, emptyBags, themeMode, toggleTheme, 
-    sidebarOpen, setSidebarOpen, activeTab, resetToDemoData
+    sidebarOpen, setSidebarOpen, activeTab
   } = useApp();
   const [showNotifications, setShowNotifications] = useState(false);
   const [alertsAcknowledged, setAlertsAcknowledged] = useState(false);
@@ -22,10 +22,11 @@ export const Navbar: React.FC = () => {
     mixes: 'Mezclas',
     kardex: 'Inventario',
     customers: 'Clientes',
+    suppliers: 'Proveedores',
     products: 'Productos',
     bags: 'Bolsas Vacías',
     audit: 'Conteo Físico',
-    financials: 'Caja Diaria',
+    financials: 'Caja y Resultados',
   };
 
   // Low stock alerts

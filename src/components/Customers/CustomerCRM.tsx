@@ -2,18 +2,21 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Customer } from '../../types';
 import { exportToCSV } from '../../utils/exportUtils';
+import { toLocalISODate } from '../../utils/dateUtils';
+import { lookupIdentity } from '../../lib/identityLookup';
 import { 
-  Users, UserPlus, Search, Phone, MapPin, Sprout, 
-  Calendar, ShieldAlert, CreditCard, Edit, Trash2, FileText, CheckCircle2, ChevronRight, ChevronLeft, Filter, FileSpreadsheet, X
+  Users, UserPlus, Search, Phone, Mail, MapPin, Sprout, Loader2, ShieldCheck,
+  Calendar, Edit, Trash2, ChevronRight, ChevronLeft, Filter, FileSpreadsheet, X
 } from 'lucide-react';
 
 export const CustomerCRM: React.FC = () => {
-  const { customers, sales, addCustomer, updateCustomer, deleteCustomer } = useApp();
+  const { customers, suppliers, sales, addCustomer, updateCustomer, deleteCustomer } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [cropFilter, setCropFilter] = useState<string>('ALL');
   const [showModal, setShowModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [lookupState, setLookupState] = useState<{ status: 'idle' | 'loading' | 'success' | 'error'; message: string }>({ status: 'idle', message: '' });
 
   // Pagination State (Default 15 items per page)
   const [currentPage, setCurrentPage] = useState(1);
@@ -26,6 +29,9 @@ export const CustomerCRM: React.FC = () => {
     docType: Customer['docType'];
     docNumber: string;
     phone: string;
+    alternatePhone: string;
+    email: string;
+    contactName: string;
     address: string;
     location: string;
     cropType: string;
@@ -40,12 +46,15 @@ export const CustomerCRM: React.FC = () => {
     docType: 'DNI',
     docNumber: '',
     phone: '',
+    alternatePhone: '',
+    email: '',
+    contactName: '',
     address: '',
     location: '',
     cropType: 'Maíz',
     hectares: 10,
     soilRiegoType: 'Riego por Gravedad',
-    nextApplicationDate: new Date().toISOString().split('T')[0],
+    nextApplicationDate: toLocalISODate(),
     notes: '',
     creditLimit: 25000
   });
@@ -56,6 +65,8 @@ export const CustomerCRM: React.FC = () => {
     const fullName = `${c.name} ${c.lastName || ''}`.toLowerCase();
     const matchesSearch = fullName.includes(searchTerm.toLowerCase()) ||
                           c.docNumber.includes(searchTerm) ||
+                          (c.email && c.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                          (c.contactName && c.contactName.toLowerCase().includes(searchTerm.toLowerCase())) ||
                           (c.location && c.location.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesCrop = cropFilter === 'ALL' || c.cropType === cropFilter;
     return matchesSearch && matchesCrop;
@@ -71,18 +82,22 @@ export const CustomerCRM: React.FC = () => {
 
   const handleOpenCreate = () => {
     setEditingCustomer(null);
+    setLookupState({ status: 'idle', message: '' });
     setFormData({
       name: '',
       lastName: '',
       docType: 'DNI',
       docNumber: '',
       phone: '',
+      alternatePhone: '',
+      email: '',
+      contactName: '',
       address: '',
       location: 'Huancayo / Valle Mantaro',
       cropType: 'Maíz',
       hectares: 10,
       soilRiegoType: 'Riego por Gravedad',
-      nextApplicationDate: new Date().toISOString().split('T')[0],
+      nextApplicationDate: toLocalISODate(),
       notes: '',
       creditLimit: 25000
     });
@@ -91,12 +106,16 @@ export const CustomerCRM: React.FC = () => {
 
   const handleOpenEdit = (cust: Customer) => {
     setEditingCustomer(cust);
+    setLookupState({ status: 'idle', message: '' });
     setFormData({
       name: cust.name,
       lastName: cust.lastName || '',
       docType: cust.docType,
       docNumber: cust.docNumber,
       phone: cust.phone,
+      alternatePhone: cust.alternatePhone || '',
+      email: cust.email || '',
+      contactName: cust.contactName || '',
       address: cust.address || '',
       location: cust.location || '',
       cropType: cust.cropType || 'Maíz',
@@ -107,6 +126,68 @@ export const CustomerCRM: React.FC = () => {
       creditLimit: cust.creditLimit
     });
     setShowModal(true);
+  };
+
+  const handleIdentityLookup = async () => {
+    const digits = formData.docNumber.replace(/\D/g, '');
+    const kind = digits.length === 11 ? 'ruc' : digits.length === 8 ? 'dni' : null;
+    if (!kind) {
+      setLookupState({ status: 'error', message: 'Ingresa un DNI de 8 dígitos o un RUC de 11 dígitos.' });
+      return;
+    }
+    const docType: Customer['docType'] = kind === 'ruc' ? 'RUC' : 'DNI';
+    const storedCustomer = customers.find(customer => customer.docNumber === digits && customer.id !== editingCustomer?.id);
+    if (storedCustomer) {
+      handleOpenEdit(storedCustomer);
+      setLookupState({ status: 'success', message: 'Cliente ya registrado. Se cargó su ficha sin consultar la API.' });
+      return;
+    }
+    const storedSupplier = suppliers.find(supplier => supplier.ruc === digits);
+    if (storedSupplier) {
+      setFormData(current => ({
+        ...current,
+        docType,
+        docNumber: digits,
+        name: storedSupplier.companyName || current.name,
+        phone: storedSupplier.phone || current.phone,
+        alternatePhone: storedSupplier.alternatePhone || current.alternatePhone,
+        email: storedSupplier.email || current.email,
+        contactName: storedSupplier.contactName || current.contactName,
+        address: storedSupplier.address || current.address,
+        location: storedSupplier.address || current.location,
+        notes: storedSupplier.notes || current.notes,
+      }));
+      setLookupState({ status: 'success', message: 'Datos recuperados de Proveedores. No se consumió una consulta de la API.' });
+      return;
+    }
+    setLookupState({ status: 'loading', message: 'Consultando datos oficiales…' });
+    try {
+      if (kind === 'dni') {
+        const data = await lookupIdentity('dni', digits);
+        setFormData(current => ({
+          ...current,
+          docType,
+          docNumber: data.dni || digits,
+          name: data.nombres || current.name,
+          lastName: [data.apellidoPaterno, data.apellidoMaterno].filter(Boolean).join(' ') || current.lastName,
+        }));
+      } else {
+        const data = await lookupIdentity('ruc', digits);
+        const location = [data.distrito, data.provincia, data.departamento].filter(Boolean).join(' · ');
+        setFormData(current => ({
+          ...current,
+          docType,
+          docNumber: data.ruc || digits,
+          name: data.razonSocial || current.name,
+          address: data.direccion || current.address,
+          location: location || current.location,
+          phone: current.phone || data.telefonos?.[0] || '',
+        }));
+      }
+      setLookupState({ status: 'success', message: 'Datos encontrados y cargados en la ficha.' });
+    } catch (error) {
+      setLookupState({ status: 'error', message: error instanceof Error ? error.message : 'No se pudo realizar la consulta.' });
+    }
   };
 
   const handleSave = (e: React.FormEvent) => {
@@ -127,6 +208,9 @@ export const CustomerCRM: React.FC = () => {
       'Tipo Doc.': c.docType,
       'N° Doc.': c.docNumber,
       'Teléfono': c.phone || '-',
+      'Teléfono alternativo': c.alternatePhone || '-',
+      'Correo': c.email || '-',
+      'Persona de contacto': c.contactName || '-',
       'Fundo / Lugar': c.location || '-',
       'Cultivo': c.cropType || '-',
       'Hectáreas': c.hectares || 0,
@@ -234,6 +318,11 @@ export const CustomerCRM: React.FC = () => {
                             </span>
                           )}
                         </div>
+                        {cust.email && (
+                          <div className="mt-1 flex items-center gap-1 text-[11px] text-slate-500">
+                            <Mail className="h-3 w-3 text-slate-400" /> {cust.email}
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -372,6 +461,9 @@ export const CustomerCRM: React.FC = () => {
             </div>
 
             <form onSubmit={handleSave} className="space-y-4">
+              <p className="rounded-lg bg-emerald-50 px-3 py-2 text-[11px] text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+                Solo el nombre es obligatorio. Los demás datos pueden completarse ahora o después.
+              </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-slate-700 dark:text-slate-300">Nombres / Razón Social *</label>
@@ -385,7 +477,7 @@ export const CustomerCRM: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">Apellidos</label>
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">Apellidos <span className="text-slate-400">(opcional)</span></label>
                   <input
                     type="text"
                     placeholder="Ej. Quispe Morales"
@@ -398,10 +490,13 @@ export const CustomerCRM: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">Tipo Documento</label>
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">Tipo de documento <span className="text-slate-400">(opcional)</span></label>
                   <select
                     value={formData.docType}
-                    onChange={(e) => setFormData({ ...formData, docType: e.target.value as any })}
+                    onChange={(e) => {
+                      setFormData({ ...formData, docType: e.target.value as Customer['docType'], docNumber: '' });
+                      setLookupState({ status: 'idle', message: '' });
+                    }}
                     className="w-full mt-1 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-xs font-medium"
                   >
                     <option value="DNI">DNI</option>
@@ -409,17 +504,24 @@ export const CustomerCRM: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">Número Documento</label>
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">Número de documento <span className="text-slate-400">(opcional)</span></label>
                   <input
                     type="text"
                     placeholder="Ej. 41829304"
                     value={formData.docNumber}
-                    onChange={(e) => setFormData({ ...formData, docNumber: e.target.value })}
+                    maxLength={11}
+                    inputMode="numeric"
+                    onChange={(e) => {
+                      const document = e.target.value.replace(/\D/g, '').slice(0, 11);
+                      const detectedType: Customer['docType'] = document.length === 11 ? 'RUC' : document.length === 8 ? 'DNI' : formData.docType;
+                      setFormData({ ...formData, docType: detectedType, docNumber: document });
+                      setLookupState({ status: 'idle', message: '' });
+                    }}
                     className="w-full mt-1 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-xs font-mono font-semibold"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">Teléfono / Celular</label>
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">Teléfono / celular <span className="text-slate-400">(opcional)</span></label>
                   <input
                     type="text"
                     placeholder="Ej. 984512039"
@@ -427,6 +529,48 @@ export const CustomerCRM: React.FC = () => {
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     className="w-full mt-1 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-xs font-medium"
                   />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 rounded-lg border border-sky-200 bg-sky-50 p-3 sm:flex-row sm:items-center sm:justify-between dark:border-sky-900 dark:bg-sky-950/30">
+                <div>
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-sky-900 dark:text-sky-200"><ShieldCheck className="h-4 w-4" /> Validación automática</div>
+                  <p className={`mt-1 text-[11px] ${lookupState.status === 'error' ? 'text-rose-600' : lookupState.status === 'success' ? 'text-emerald-700 dark:text-emerald-400' : 'text-sky-700 dark:text-sky-300'}`}>
+                    {lookupState.message || `Consulta el ${formData.docType === 'RUC' ? 'RUC' : 'DNI'} y completa los datos disponibles.`}
+                  </p>
+                </div>
+                <button type="button" className="btn-secondary shrink-0" onClick={handleIdentityLookup} disabled={lookupState.status === 'loading'}>
+                  {lookupState.status === 'loading' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  Consultar {formData.docType === 'RUC' ? 'RUC' : 'DNI'}
+                </button>
+              </div>
+
+              <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700/80 dark:bg-slate-800/60">
+                <div>
+                  <h4 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-900 dark:text-slate-100">
+                    <Mail className="h-4 w-4 text-emerald-600" /> Contacto y condiciones
+                  </h4>
+                  <p className="mt-1 text-[11px] text-slate-500">Información opcional para seguimiento, cobranza y entrega.</p>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">Correo electrónico <span className="text-slate-400">(opcional)</span>
+                    <input type="email" autoComplete="email" placeholder="cliente@empresa.com" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="field" />
+                  </label>
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">Teléfono alternativo <span className="text-slate-400">(opcional)</span>
+                    <input type="tel" inputMode="tel" autoComplete="tel" placeholder="Ej. 01 555 0000" value={formData.alternatePhone} onChange={(e) => setFormData({ ...formData, alternatePhone: e.target.value })} className="field" />
+                  </label>
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">Persona de contacto <span className="text-slate-400">(opcional)</span>
+                    <input type="text" placeholder="Encargado de compras o administrador" value={formData.contactName} onChange={(e) => setFormData({ ...formData, contactName: e.target.value })} className="field" />
+                  </label>
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">Límite de crédito <span className="text-slate-400">(opcional)</span>
+                    <input type="number" min="0" step="0.01" value={formData.creditLimit} onChange={(e) => setFormData({ ...formData, creditLimit: Number(e.target.value) || 0 })} className="field" />
+                  </label>
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300 sm:col-span-2">Dirección fiscal o de entrega <span className="text-slate-400">(opcional)</span>
+                    <input type="text" placeholder="Av., calle, referencia o punto de entrega" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} className="field" />
+                  </label>
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300 sm:col-span-2">Observaciones <span className="text-slate-400">(opcional)</span>
+                    <textarea placeholder="Preferencias, condiciones comerciales o referencias" value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} className="field min-h-20" />
+                  </label>
                 </div>
               </div>
 
@@ -508,6 +652,65 @@ export const CustomerCRM: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {selectedCustomer && (
+        <div className="modal-backdrop">
+          <div className="modal-panel max-w-3xl">
+            <div className="modal-header">
+              <div>
+                <div className="eyebrow">Historial comercial</div>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                  {selectedCustomer.name} {selectedCustomer.lastName || ''}
+                </h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  {selectedCustomer.docType} {selectedCustomer.docNumber} · {selectedCustomer.phone || 'Sin teléfono'}
+                </p>
+              </div>
+              <button className="icon-button" onClick={() => setSelectedCustomer(null)} aria-label="Cerrar historial">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 p-5">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="stat-card">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Compras realizadas</div>
+                  <div className="mt-2 text-2xl font-bold">{sales.filter(s => s.customerId === selectedCustomer.id && s.status !== 'ANULADO').length}</div>
+                </div>
+                <div className="stat-card">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Total vendido</div>
+                  <div className="mt-2 text-xl font-bold">S/ {sales.filter(s => s.customerId === selectedCustomer.id && s.status !== 'ANULADO').reduce((sum, s) => sum + s.totalAmount, 0).toLocaleString('es-PE', { minimumFractionDigits: 2 })}</div>
+                </div>
+                <div className="stat-card">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Deuda pendiente</div>
+                  <div className="mt-2 text-xl font-bold text-amber-600">S/ {selectedCustomer.currentDebt.toLocaleString('es-PE', { minimumFractionDigits: 2 })}</div>
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
+                <table className="data-table">
+                  <thead><tr><th>Fecha</th><th>Operación</th><th>Estado</th><th className="text-right">Total</th><th className="text-right">Saldo</th></tr></thead>
+                  <tbody>
+                    {sales.filter(s => s.customerId === selectedCustomer.id).map(sale => (
+                      <tr key={sale.id}>
+                        <td>{sale.saleDate}</td>
+                        <td className="font-mono font-semibold">{sale.proformaNumber}</td>
+                        <td><span className="badge-neutral">{sale.status}</span></td>
+                        <td className="text-right font-mono">S/ {sale.totalAmount.toLocaleString('es-PE', { minimumFractionDigits: 2 })}</td>
+                        <td className="text-right font-mono font-semibold text-amber-600">S/ {Math.max(0, sale.totalAmount - sale.paidAmount).toLocaleString('es-PE', { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    ))}
+                    {!sales.some(s => s.customerId === selectedCustomer.id) && (
+                      <tr><td colSpan={5} className="empty-state">Este cliente aún no tiene ventas registradas.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="modal-actions"><button className="btn-primary" onClick={() => setSelectedCustomer(null)}>Cerrar historial</button></div>
+            </div>
           </div>
         </div>
       )}

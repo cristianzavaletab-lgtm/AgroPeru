@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, CheckCircle2, ArrowRight, X, Play, Shield, Layers, Receipt, ShoppingCart, FlaskConical, History, DollarSign } from 'lucide-react';
+import { BookOpen, ArrowRight, X, Receipt, ShoppingCart, FlaskConical, History, DollarSign } from 'lucide-react';
 
 interface SystemGuideModalProps {
   isOpen: boolean;

@@ -13,8 +13,7 @@ interface QuickProductModalProps {
 export const QuickProductModal: React.FC<QuickProductModalProps> = ({
   isOpen,
   onClose,
-  onProductCreated,
-  initialType = 'sale'
+  onProductCreated
 }) => {
   const { quickAddProduct, categories } = useApp();
   const [name, setName] = useState('');

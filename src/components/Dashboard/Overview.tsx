@@ -2,10 +2,11 @@ import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
   TrendingUp, ShoppingCart, Package, DollarSign, 
-  AlertTriangle, ArrowUpRight, ArrowDownRight, Layers,
-  Receipt, FlaskConical, CheckCircle2, History, ChevronRight
+  AlertTriangle, ArrowUpRight,
+  Receipt, FlaskConical, History, ChevronRight
 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { toLocalISODate } from '../../utils/dateUtils';
 
 const MOVEMENT_LABELS: Record<string, string> = {
   INITIAL_STOCK: 'Stock Inicial',
@@ -47,7 +48,7 @@ export const Overview: React.FC = () => {
   // Dynamic sales aggregation from real sales context
   const salesByDayMap: { [dateStr: string]: number } = {};
   activeSales.forEach(s => {
-    const d = s.saleDate || new Date().toISOString().split('T')[0];
+    const d = s.saleDate || toLocalISODate();
     salesByDayMap[d] = (salesByDayMap[d] || 0) + s.totalAmount;
   });
 

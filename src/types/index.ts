@@ -10,6 +10,11 @@ export type MovementType =
 
 export type SaleStatus = 'PENDIENTE' | 'PAGADO' | 'CREDITO' | 'ANULADO' | 'ENTREGADO';
 
+export type PaymentMethod = 'EFECTIVO' | 'YAPE' | 'TRANSFERENCIA' | 'CREDITO';
+export type SaleDocumentKind = 'SIN_COMPROBANTE' | 'PROFORMA' | 'BOLETA' | 'FACTURA';
+export type SunatStatus = 'NO_APLICA' | 'PENDIENTE' | 'ACEPTADO' | 'RECHAZADO';
+export type PurchaseStatus = 'PENDIENTE_RECOJO' | 'EN_TRANSITO' | 'RECIBIDO' | 'CANCELADO';
+
 export type DocumentType = 'DNI' | 'RUC' | 'PROFORMA' | 'BOLETA' | 'FACTURA' | 'GUIA';
 
 export interface Category {
@@ -52,6 +57,9 @@ export interface Customer {
   docType: DocumentType;
   docNumber: string;
   phone: string;
+  alternatePhone?: string;
+  email?: string;
+  contactName?: string;
   address?: string;
   location?: string; // Fundo, Distrito, Caserío (Ubicación)
   cropType?: string; // Cultivo (Maíz, Papa, Arroz, Palto, Hortalizas, etc.)
@@ -66,10 +74,28 @@ export interface Customer {
 export interface Supplier {
   id: string;
   companyName: string;
+  docType: DocumentType;
+  /** Número de documento. Se conserva el nombre `ruc` por compatibilidad con datos anteriores. */
   ruc: string;
   contactName?: string;
   phone?: string;
+  alternatePhone?: string;
   address?: string;
+  email?: string;
+  website?: string;
+  notes?: string;
+  active?: boolean;
+}
+
+export interface FreightCharge {
+  id: string;
+  origin: string;
+  destination?: string;
+  carrier?: string;
+  amountPen: number;
+  status: 'PENDIENTE' | 'PAGADO';
+  paymentMethod?: Exclude<PaymentMethod, 'CREDITO'>;
+  notes?: string;
 }
 
 export interface ProductLot {
@@ -109,9 +135,18 @@ export interface Purchase {
   currency: 'PEN' | 'USD';
   exchangeRate: number;
   freightCostPen: number;
+  freights?: FreightCharge[];
   totalUsd?: number;
   totalPen: number;
   items: PurchaseItem[];
+  status?: PurchaseStatus;
+  paymentStatus?: 'PENDIENTE' | 'PARCIAL' | 'PAGADO';
+  paymentMethod?: PaymentMethod;
+  paidAmount?: number;
+  expectedPickupDate?: string;
+  receivedDate?: string;
+  inventoryPosted?: boolean;
+  notes?: string;
 }
 
 export interface SaleItem {
@@ -134,6 +169,13 @@ export interface Sale {
   paidAmount: number;
   items: SaleItem[];
   notes?: string;
+  paymentMethod?: PaymentMethod;
+  documentType?: SaleDocumentKind;
+  documentSeries?: string;
+  documentNumber?: string;
+  sunatStatus?: SunatStatus;
+  dueDate?: string;
+  deliveryStatus?: 'PENDIENTE' | 'ENTREGADO';
 }
 
 export interface InventoryMovement {
@@ -219,10 +261,26 @@ export interface FinancialMovement {
   id: string;
   date: string;
   type: 'INGRESOS' | 'EGRESOS';
-  category: 'VENTA' | 'COMPRA' | 'TRANSPORTE' | 'ESTIBA' | 'AGUA' | 'LUZ' | 'PROFORMAS' | 'CINTA' | 'OTROS';
+  category: 'VENTA' | 'COMPRA' | 'TRANSPORTE' | 'ESTIBA' | 'AGUA' | 'LUZ' | 'PROFORMAS' | 'CINTA' | 'BOLSAS' | 'OTROS';
   description: string;
   amountPen: number;
   cashRegister: 'CAJA_1' | 'CAJA_2';
+  paymentMethod?: PaymentMethod;
+  referenceId?: string;
+}
+
+export interface CashClosing {
+  id: string;
+  createdAt: string;
+  from: string;
+  to: string;
+  label: string;
+  incomePen: number;
+  expensePen: number;
+  balancePen: number;
+  salesPen: number;
+  purchasesPen: number;
+  notes?: string;
 }
 
 export interface DailyClosingSummary {

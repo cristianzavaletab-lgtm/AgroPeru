@@ -2,7 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   Product, Category, Customer, Supplier, Purchase, Sale, 
   InventoryMovement, MixRecipe, MixExecution, EmptyBagStock, 
-  FinancialMovement, PhysicalAuditItem, ProductLot 
+  FinancialMovement, PhysicalAuditItem, ProductLot, CashClosing,
+  PaymentMethod, SaleDocumentKind, PurchaseStatus
 } from '../types';
 import { 
   initialProducts, initialCategories, initialCustomers, 
@@ -11,6 +12,7 @@ import {
   initialLots, initialExecutions 
 } from '../data/mockData';
 import { dbSync } from '../lib/supabaseSync';
+import { toLocalISODate } from '../utils/dateUtils';
 
 const loadLocal = <T,>(key: string, fallback: T): T => {
   try {
@@ -20,6 +22,18 @@ const loadLocal = <T,>(key: string, fallback: T): T => {
     return fallback;
   }
 };
+
+const normalizeCustomerNames = (items: Customer[]): Customer[] => items.map(customer => {
+  const name = customer.name.trim();
+  const lastName = customer.lastName?.trim();
+  if (!lastName || !name.toLocaleLowerCase('es-PE').endsWith(lastName.toLocaleLowerCase('es-PE'))) return customer;
+  return { ...customer, name: name.slice(0, -lastName.length).trim(), lastName };
+});
+
+const normalizeSuppliers = (items: Supplier[]): Supplier[] => items.map(supplier => ({
+  ...supplier,
+  docType: supplier.docType || (supplier.ruc.length === 8 ? 'DNI' : 'RUC'),
+}));
 
 interface AppContextType {
   activeTab: string;
@@ -48,6 +62,7 @@ interface AppContextType {
   mixExecutions: MixExecution[];
   emptyBags: EmptyBagStock[];
   financials: FinancialMovement[];
+  cashClosings: CashClosing[];
 
   // Actions
   resetToDemoData: () => void;
@@ -60,19 +75,27 @@ interface AppContextType {
   updateCustomer: (id: string, customer: Partial<Customer>) => void;
   deleteCustomer: (id: string) => boolean;
   addSupplier: (supplier: Omit<Supplier, 'id'>) => void;
+  updateSupplier: (id: string, supplier: Partial<Supplier>) => void;
+  deleteSupplier: (id: string) => boolean;
   addPurchase: (purchase: Omit<Purchase, 'id'>) => void;
+  updatePurchase: (id: string, purchase: Partial<Purchase>) => void;
+  updatePurchaseStatus: (id: string, status: PurchaseStatus) => void;
   deletePurchase: (id: string) => boolean;
   addSale: (sale: Omit<Sale, 'id'>) => boolean;
   anularSale: (saleId: string) => boolean;
   deleteSale: (saleId: string) => boolean;
   updateSaleStatus: (saleId: string, newStatus: Sale['status']) => void;
+  updateSale: (saleId: string, sale: Partial<Sale>) => void;
+  issueSaleDocument: (saleId: string, kind: SaleDocumentKind) => void;
   executeMix: (recipeId: string, producedQtyTm: number, proformaNumber?: string) => boolean;
   addRecipe: (recipe: Omit<MixRecipe, 'id'>) => void;
   deleteRecipe: (id: string) => boolean;
-  updateBagStock: (id: string, incoming: number, outgoing: number) => void;
+  updateBagStock: (id: string, incoming: number, outgoing: number, costPen?: number, paymentMethod?: PaymentMethod, notes?: string) => void;
   reconcileAudit: (items: PhysicalAuditItem[]) => void;
   addFinancialMovement: (movement: Omit<FinancialMovement, 'id'>) => void;
   deleteFinancialMovement: (id: string) => boolean;
+  saveCashClosing: (closing: Omit<CashClosing, 'id' | 'createdAt'>) => void;
+  deleteCashClosing: (id: string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -102,18 +125,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setThemeMode(prev => (prev === 'light' ? 'dark' : 'light'));
   };
 
-  const [products, setProducts] = useState<Product[]>(() => loadLocal('agroperu_products', []));
-  const [categories] = useState<Category[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>(() => loadLocal('agroperu_customers', []));
-  const [suppliers, setSuppliers] = useState<Supplier[]>(() => loadLocal('agroperu_suppliers', []));
-  const [purchases, setPurchases] = useState<Purchase[]>(() => loadLocal('agroperu_purchases', []));
-  const [sales, setSales] = useState<Sale[]>(() => loadLocal('agroperu_sales', []));
-  const [kardex, setKardex] = useState<InventoryMovement[]>(() => loadLocal('agroperu_kardex', []));
-  const [lots, setLots] = useState<ProductLot[]>(() => loadLocal('agroperu_lots', []));
-  const [mixRecipes, setMixRecipes] = useState<MixRecipe[]>(() => loadLocal('agroperu_recipes', []));
-  const [mixExecutions, setMixExecutions] = useState<MixExecution[]>(() => loadLocal('agroperu_executions', []));
-  const [emptyBags, setEmptyBags] = useState<EmptyBagStock[]>(() => loadLocal('agroperu_bags', []));
-  const [financials, setFinancials] = useState<FinancialMovement[]>(() => loadLocal('agroperu_financials', []));
+  const [products, setProducts] = useState<Product[]>(() => loadLocal('agroperu_products', initialProducts));
+  const [categories] = useState<Category[]>(initialCategories);
+  const [customers, setCustomers] = useState<Customer[]>(() => normalizeCustomerNames(loadLocal('agroperu_customers', initialCustomers)));
+  const [suppliers, setSuppliers] = useState<Supplier[]>(() => normalizeSuppliers(loadLocal('agroperu_suppliers', initialSuppliers)));
+  const [purchases, setPurchases] = useState<Purchase[]>(() => loadLocal('agroperu_purchases', initialPurchases));
+  const [sales, setSales] = useState<Sale[]>(() => loadLocal('agroperu_sales', initialSales));
+  const [kardex, setKardex] = useState<InventoryMovement[]>(() => loadLocal('agroperu_kardex', initialKardex));
+  const [lots, setLots] = useState<ProductLot[]>(() => loadLocal('agroperu_lots', initialLots));
+  const [mixRecipes, setMixRecipes] = useState<MixRecipe[]>(() => loadLocal('agroperu_recipes', initialRecipes));
+  const [mixExecutions, setMixExecutions] = useState<MixExecution[]>(() => loadLocal('agroperu_executions', initialExecutions));
+  const [emptyBags, setEmptyBags] = useState<EmptyBagStock[]>(() => loadLocal('agroperu_bags', initialBags));
+  const [financials, setFinancials] = useState<FinancialMovement[]>(() => loadLocal('agroperu_financials', initialFinancials));
+  const [cashClosings, setCashClosings] = useState<CashClosing[]>(() => loadLocal('agroperu_cash_closings', []));
 
   // Reset/seed all system data to rich demo dataset
   const resetToDemoData = () => {
@@ -145,33 +169,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     triggerSuccess('¡Sistema restaurado y poblado con datos de prueba realistas para AgroPerú!');
   };
 
-  // Temporarily clear storage and state on mount to ensure fresh start
-  useEffect(() => {
-    if (!localStorage.getItem('agroperu_force_clean_v3')) {
-      const keys = [
-        'agroperu_products', 'agroperu_customers', 'agroperu_suppliers', 
-        'agroperu_purchases', 'agroperu_sales', 'agroperu_kardex', 
-        'agroperu_lots', 'agroperu_recipes', 'agroperu_executions', 
-        'agroperu_bags', 'agroperu_financials', 'agroperu_categories'
-      ];
-      keys.forEach(k => localStorage.removeItem(k));
-      
-      setProducts([]);
-      setCustomers([]);
-      setSuppliers([]);
-      setPurchases([]);
-      setSales([]);
-      setKardex([]);
-      setLots([]);
-      setMixRecipes([]);
-      setMixExecutions([]);
-      setEmptyBags([]);
-      setFinancials([]);
-
-      localStorage.setItem('agroperu_force_clean_v3', 'true');
-    }
-  }, []);
-
   // Sync state changes to localStorage for 100% reload persistence
   useEffect(() => { localStorage.setItem('agroperu_products', JSON.stringify(products)); }, [products]);
   useEffect(() => { localStorage.setItem('agroperu_lots', JSON.stringify(lots)); }, [lots]);
@@ -184,18 +181,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => { localStorage.setItem('agroperu_executions', JSON.stringify(mixExecutions)); }, [mixExecutions]);
   useEffect(() => { localStorage.setItem('agroperu_bags', JSON.stringify(emptyBags)); }, [emptyBags]);
   useEffect(() => { localStorage.setItem('agroperu_financials', JSON.stringify(financials)); }, [financials]);
+  useEffect(() => { localStorage.setItem('agroperu_cash_closings', JSON.stringify(cashClosings)); }, [cashClosings]);
 
   // Sync from Supabase on mount if available
   useEffect(() => {
     async function loadSupabaseData() {
       try {
-        const [remoteProds, remoteCusts, remoteSales] = await Promise.all([
+        const [remoteProds, remoteCusts, remoteSuppliers, remoteSales] = await Promise.all([
           dbSync.getProducts(),
           dbSync.getCustomers(),
+          dbSync.getSuppliers(),
           dbSync.getSales()
         ]);
         if (remoteProds && remoteProds.length > 0) setProducts(remoteProds);
-        if (remoteCusts && remoteCusts.length > 0) setCustomers(remoteCusts);
+        if (remoteCusts && remoteCusts.length > 0) setCustomers(normalizeCustomerNames(remoteCusts));
+        if (remoteSuppliers && remoteSuppliers.length > 0) setSuppliers(normalizeSuppliers(remoteSuppliers));
         if (remoteSales && remoteSales.length > 0) setSales(remoteSales);
       } catch (err) {
         console.warn('Supabase remote load skipped, using local data:', err);
@@ -338,23 +338,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Add Supplier
   const addSupplier = (supplierData: Omit<Supplier, 'id'>) => {
+    if (suppliers.some(supplier => supplier.ruc === supplierData.ruc)) {
+      triggerError('Ya existe un proveedor con ese DNI o RUC.');
+      return;
+    }
     const newSupplier: Supplier = {
       ...supplierData,
       id: `supp-${Date.now()}`
     };
     setSuppliers(prev => [...prev, newSupplier]);
+    dbSync.saveSupplier(newSupplier);
     triggerSuccess(`Proveedor '${supplierData.companyName}' agregado.`);
+  };
+
+  const updateSupplier = (id: string, supplierData: Partial<Supplier>) => {
+    if (supplierData.ruc && suppliers.some(supplier => supplier.id !== id && supplier.ruc === supplierData.ruc)) {
+      triggerError('Otro proveedor ya usa ese DNI o RUC.');
+      return;
+    }
+    setSuppliers(prev => prev.map(s => {
+      if (s.id !== id) return s;
+      const updated = { ...s, ...supplierData };
+      dbSync.saveSupplier(updated);
+      return updated;
+    }));
+    triggerSuccess('Proveedor actualizado correctamente.');
+  };
+
+  const deleteSupplier = (id: string) => {
+    if (purchases.some(p => p.supplierId === id)) {
+      triggerError('No se puede eliminar: el proveedor tiene compras relacionadas. Puedes marcarlo como inactivo.');
+      return false;
+    }
+    setSuppliers(prev => prev.filter(s => s.id !== id));
+    dbSync.deleteSupplier(id);
+    triggerSuccess('Proveedor eliminado.');
+    return true;
   };
 
   // Add Purchase (Updates Stock + Lots + Matrix INGRESO COMPRA + Kardex) with USD Support
   const addPurchase = (purchaseData: Omit<Purchase, 'id'>) => {
     setIsLoading(true);
     const purchaseId = `pur-${Date.now()}`;
-    const newPurchase: Purchase = { ...purchaseData, id: purchaseId };
-    const dateStr = purchaseData.purchaseDate || new Date().toISOString().split('T')[0];
+    const purchaseStatus = purchaseData.status || 'RECIBIDO';
+    const newPurchase: Purchase = { ...purchaseData, id: purchaseId, status: purchaseStatus, inventoryPosted: purchaseStatus === 'RECIBIDO' };
+    const dateStr = purchaseData.purchaseDate || toLocalISODate();
 
     setTimeout(() => {
       setPurchases(prev => [newPurchase, ...prev]);
+
+      if (purchaseStatus === 'RECIBIDO') {
 
       const totalTmInPurchase = purchaseData.items.reduce((acc, i) => acc + i.quantityTm, 0);
       const freightPerTm = totalTmInPurchase > 0 ? (purchaseData.freightCostPen / totalTmInPurchase) : 0;
@@ -438,20 +471,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       setLots(prevLots => [...newLotsToAdd, ...prevLots]);
       setKardex(kPrev => [...newKardexItems, ...kPrev]);
+      }
 
-      const newExpense: FinancialMovement = {
-        id: `fin-${Date.now()}`,
-        date: dateStr,
-        type: 'EGRESOS',
-        category: 'COMPRA',
-        description: `Compra - ${purchaseData.supplierName} (${purchaseData.docNumber})`,
-        amountPen: purchaseData.totalPen,
-        cashRegister: 'CAJA_1'
-      };
-      setFinancials(prev => [newExpense, ...prev]);
+      const paidAmount = purchaseData.paidAmount ?? (purchaseData.paymentStatus === 'PAGADO' ? purchaseData.totalPen : 0);
+      const freightTotal = (purchaseData.freights || []).reduce((sum, f) => sum + f.amountPen, 0) || purchaseData.freightCostPen;
+      const merchandisePaid = Math.max(0, paidAmount - freightTotal);
+      const movements: FinancialMovement[] = [];
+      if (merchandisePaid > 0) {
+        movements.push({
+          id: `fin-${Date.now()}-purchase`, date: dateStr, type: 'EGRESOS', category: 'COMPRA',
+          description: `Pago compra - ${purchaseData.supplierName} (${purchaseData.docNumber})`,
+          amountPen: merchandisePaid, cashRegister: 'CAJA_1', paymentMethod: purchaseData.paymentMethod,
+          referenceId: purchaseId
+        });
+      }
+      (purchaseData.freights || []).filter(f => f.status === 'PAGADO').forEach((freight, index) => {
+        movements.push({
+          id: `fin-${Date.now()}-freight-${index}`, date: dateStr, type: 'EGRESOS', category: 'TRANSPORTE',
+          description: `Flete ${freight.origin}${freight.carrier ? ` - ${freight.carrier}` : ''} (${purchaseData.docNumber})`,
+          amountPen: freight.amountPen, cashRegister: 'CAJA_1', paymentMethod: freight.paymentMethod,
+          referenceId: purchaseId
+        });
+      });
+      if (movements.length) setFinancials(prev => [...movements, ...prev]);
 
       setIsLoading(false);
-      triggerSuccess(`Compra ${purchaseData.docNumber} procesada y registrada en lotes y Kardex.`);
+      triggerSuccess(purchaseStatus === 'RECIBIDO'
+        ? `Compra ${purchaseData.docNumber} registrada e ingresada al inventario.`
+        : `Compra ${purchaseData.docNumber} guardada como ${purchaseStatus.replace(/_/g, ' ').toLowerCase()}.`);
     }, 400);
   };
 
@@ -472,7 +519,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsLoading(true);
     const saleId = `sale-${Date.now()}`;
     const newSale: Sale = { ...saleData, id: saleId };
-    const dateStr = saleData.saleDate || new Date().toISOString().split('T')[0];
+    const dateStr = saleData.saleDate || toLocalISODate();
 
     setTimeout(() => {
       setSales(prev => [newSale, ...prev]);
@@ -574,7 +621,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           category: 'VENTA',
           description: `Cobro Proforma N.º ${saleData.proformaNumber} - ${saleData.customerName}`,
           amountPen: paid,
-          cashRegister: 'CAJA_1'
+          cashRegister: 'CAJA_1',
+          paymentMethod: saleData.paymentMethod || (saleData.status === 'CREDITO' ? 'CREDITO' : 'EFECTIVO'),
+          referenceId: saleId
         };
         setFinancials(prev => [newIncome, ...prev]);
       }
@@ -592,7 +641,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!sale || sale.status === 'ANULADO') return false;
 
     setIsLoading(true);
-    const dateStr = new Date().toISOString().split('T')[0];
+    const dateStr = toLocalISODate();
 
     setTimeout(() => {
       setSales(prev => prev.map(s => s.id === saleId ? { ...s, status: 'ANULADO' } : s));
@@ -694,12 +743,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           
           const newIncome: FinancialMovement = {
             id: `fin-${Date.now()}`,
-            date: new Date().toISOString().split('T')[0],
+            date: toLocalISODate(),
             type: 'INGRESOS',
             category: 'VENTA',
             description: `Cobro de crédito Proforma N.º ${s.proformaNumber} - ${s.customerName}`,
             amountPen: pendingDebt,
-            cashRegister: 'CAJA_1'
+            cashRegister: 'CAJA_1',
+            paymentMethod: s.paymentMethod === 'CREDITO' ? 'EFECTIVO' : s.paymentMethod,
+            referenceId: saleId
           };
           setFinancials(fPrev => [newIncome, ...fPrev]);
         }
@@ -708,6 +759,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return s;
     }));
     triggerSuccess(`Estado de venta actualizado a ${newStatus}.`);
+  };
+
+  const updateSale = (saleId: string, saleData: Partial<Sale>) => {
+    setSales(prev => prev.map(s => s.id === saleId ? { ...s, ...saleData } : s));
+    triggerSuccess('Venta actualizada correctamente.');
+  };
+
+  const issueSaleDocument = (saleId: string, kind: SaleDocumentKind) => {
+    if (!sales.some(s => s.id === saleId)) return;
+    const sequence = String(sales.filter(s => s.documentType === kind).length + 1).padStart(8, '0');
+    const series = kind === 'FACTURA' ? 'F001' : kind === 'BOLETA' ? 'B001' : kind === 'PROFORMA' ? 'P001' : '';
+    setSales(prev => prev.map(s => s.id === saleId ? {
+      ...s,
+      documentType: kind,
+      documentSeries: series || undefined,
+      documentNumber: series ? `${series}-${sequence}` : undefined,
+      sunatStatus: kind === 'FACTURA' || kind === 'BOLETA' ? 'PENDIENTE' : 'NO_APLICA'
+    } : s));
+    triggerSuccess(kind === 'SIN_COMPROBANTE'
+      ? 'Venta marcada sin comprobante.'
+      : `${kind === 'PROFORMA' ? 'Proforma' : 'Comprobante'} generado. ${kind === 'FACTURA' || kind === 'BOLETA' ? 'Queda pendiente de envío a SUNAT.' : ''}`);
   };
 
   // Execute Mixture Production (SIMULTANEOUS PREPARADO SALIDA & PREPARADO INGRESO)
@@ -729,7 +801,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     setIsLoading(true);
-    const dateStr = new Date().toISOString().split('T')[0];
+    const dateStr = toLocalISODate();
     const targetProd = products.find(p => p.id === recipe.targetProductId);
     const targetBagWeight = targetProd?.bagWeightKg || 50;
     const producedBags = Math.round(producedQtyTm * (1000 / targetBagWeight));
@@ -844,7 +916,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     triggerSuccess(`Formulación '${recipeData.name}' guardada.`);
   };
 
-  const updateBagStock = (id: string, incoming: number, outgoing: number) => {
+  const updateBagStock = (id: string, incoming: number, outgoing: number, costPen = 0, paymentMethod: PaymentMethod = 'EFECTIVO', notes = '') => {
     const inc = Math.max(0, Number(incoming) || 0);
     const out = Math.max(0, Number(outgoing) || 0);
     setEmptyBags(prev => prev.map(b => {
@@ -860,12 +932,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return b;
     }));
-    triggerSuccess(`Stock de bolsas vacías actualizado.`);
+    if (costPen > 0) {
+      const bag = emptyBags.find(b => b.id === id);
+      setFinancials(prev => [{
+        id: `fin-bag-${Date.now()}`,
+        date: toLocalISODate(),
+        type: 'EGRESOS',
+        category: 'BOLSAS',
+        description: `Compra de ${inc} bolsas ${bag?.bagName || ''}${notes ? ` - ${notes}` : ''}`,
+        amountPen: costPen,
+        cashRegister: 'CAJA_1',
+        paymentMethod
+      }, ...prev]);
+    }
+    triggerSuccess(`Movimiento de bolsas guardado${costPen > 0 ? ' y registrado como gasto' : ''}.`);
   };
 
   const reconcileAudit = (items: PhysicalAuditItem[]) => {
     setIsLoading(true);
-    const dateStr = new Date().toISOString().split('T')[0];
+    const dateStr = toLocalISODate();
     let adjustedCount = 0;
 
     setTimeout(() => {
@@ -930,7 +1015,74 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
+  const updatePurchase = (id: string, purchaseData: Partial<Purchase>) => {
+    setPurchases(prev => prev.map(p => p.id === id ? { ...p, ...purchaseData } : p));
+    triggerSuccess('Compra actualizada correctamente.');
+  };
+
+  const updatePurchaseStatus = (id: string, status: PurchaseStatus) => {
+    const purchase = purchases.find(p => p.id === id);
+    if (!purchase) return;
+    const alreadyPosted = purchase.inventoryPosted ?? (purchase.status === undefined || purchase.status === 'RECIBIDO');
+    if (alreadyPosted && status !== 'RECIBIDO') {
+      triggerError('La mercadería ya ingresó al inventario. El estado de recepción no puede retroceder.');
+      return;
+    }
+    if (status === 'RECIBIDO' && !alreadyPosted) {
+      const freightPerTm = purchase.items.reduce((sum, item) => sum + item.quantityTm, 0) > 0
+        ? purchase.freightCostPen / purchase.items.reduce((sum, item) => sum + item.quantityTm, 0)
+        : 0;
+      const receivedDate = toLocalISODate();
+      const postedLots: ProductLot[] = [];
+      const postedKardex: InventoryMovement[] = [];
+      setProducts(prev => prev.map(product => {
+        const related = purchase.items.filter(item => item.productId === product.id);
+        if (!related.length) return product;
+        const addedTm = related.reduce((sum, item) => sum + item.quantityTm, 0);
+        const addedBags = related.reduce((sum, item) => sum + item.bags, 0);
+        const newStockTm = parseFloat((product.currentStockTm + addedTm).toFixed(3));
+        const newBags = product.currentBags + addedBags;
+        related.forEach((item, index) => {
+          const baseCost = purchase.currency === 'USD' ? (item.pricePerTmUsd || 0) * purchase.exchangeRate : item.pricePerTmPen;
+          const cost = parseFloat((baseCost + freightPerTm).toFixed(2));
+          const lotNumber = item.lotNumber || `LOT-${String(index + 1).padStart(3, '0')}`;
+          postedLots.push({
+            id: `lot-${Date.now()}-${product.id}-${index}`, productId: product.id, productName: product.name,
+            lotNumber, entryDate: receivedDate, initialQuantityTm: item.quantityTm, currentQuantityTm: item.quantityTm,
+            initialBags: item.bags, currentBags: item.bags, unitCostPen: cost,
+            salePricePen: item.salePricePen || product.salePricePen, status: 'DISPONIBLE',
+            purchaseDocNumber: purchase.docNumber, supplierName: purchase.supplierName
+          });
+          postedKardex.push({
+            id: `kard-${Date.now()}-${product.id}-${index}`, productId: product.id, productName: product.name,
+            lotNumber, type: 'PURCHASE', quantityTm: item.quantityTm, quantityBags: item.bags,
+            unitCostPen: cost, salePricePen: item.salePricePen || product.salePricePen,
+            balanceStockTm: newStockTm, balanceBags: newBags, referenceType: 'PURCHASE', referenceId: purchase.docNumber,
+            date: receivedDate, notes: `Mercadería recibida de ${purchase.supplierName}`
+          });
+        });
+        return {
+          ...product, currentStockTm: newStockTm, currentBags: newBags,
+          totalIngresoCompraTm: product.totalIngresoCompraTm + addedTm,
+          purchasePricePen: postedLots[postedLots.length - 1]?.unitCostPen || product.purchasePricePen
+        };
+      }));
+      setLots(prev => [...postedLots, ...prev]);
+      setKardex(prev => [...postedKardex, ...prev]);
+      setPurchases(prev => prev.map(p => p.id === id ? { ...p, status, inventoryPosted: true, receivedDate } : p));
+      triggerSuccess(`Compra ${purchase.docNumber} recibida e ingresada al inventario.`);
+      return;
+    }
+    setPurchases(prev => prev.map(p => p.id === id ? { ...p, status } : p));
+    triggerSuccess(`Estado de compra actualizado a ${status.replace(/_/g, ' ').toLowerCase()}.`);
+  };
+
   const deletePurchase = (id: string) => {
+    const purchase = purchases.find(p => p.id === id);
+    if (purchase?.inventoryPosted || (!purchase?.status && purchase)) {
+      triggerError('No se puede eliminar una compra que ya ingresó al inventario. Cámbiala o anúlala conservando la trazabilidad.');
+      return false;
+    }
     setPurchases(prev => prev.filter(p => p.id !== id));
     triggerSuccess(`Compra eliminada.`);
     return true;
@@ -957,6 +1109,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
+  const saveCashClosing = (closingData: Omit<CashClosing, 'id' | 'createdAt'>) => {
+    setCashClosings(prev => [{
+      ...closingData,
+      id: `close-${Date.now()}`,
+      createdAt: new Date().toISOString()
+    }, ...prev]);
+    triggerSuccess('Cierre de caja guardado.');
+  };
+
+  const deleteCashClosing = (id: string) => {
+    setCashClosings(prev => prev.filter(c => c.id !== id));
+    triggerSuccess('Cierre eliminado.');
+  };
+
   return (
     <AppContext.Provider value={{
       activeTab, setActiveTab,
@@ -967,10 +1133,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sidebarOpen, setSidebarOpen,
       products, categories, customers, suppliers,
       purchases, sales, kardex, lots, mixRecipes, mixExecutions,
-      emptyBags, financials,
-      addProduct, quickAddProduct, updateProduct, deleteProduct, clearProductCount, addCustomer, updateCustomer, deleteCustomer, addSupplier,
-      addPurchase, deletePurchase, addSale, anularSale, deleteSale, updateSaleStatus, executeMix,
-      addRecipe, deleteRecipe, updateBagStock, reconcileAudit, addFinancialMovement, deleteFinancialMovement, resetToDemoData
+      emptyBags, financials, cashClosings,
+      addProduct, quickAddProduct, updateProduct, deleteProduct, clearProductCount, addCustomer, updateCustomer, deleteCustomer,
+      addSupplier, updateSupplier, deleteSupplier,
+      addPurchase, updatePurchase, updatePurchaseStatus, deletePurchase,
+      addSale, anularSale, deleteSale, updateSaleStatus, updateSale, issueSaleDocument, executeMix,
+      addRecipe, deleteRecipe, updateBagStock, reconcileAudit, addFinancialMovement, deleteFinancialMovement,
+      saveCashClosing, deleteCashClosing, resetToDemoData
     }}>
       {children}
     </AppContext.Provider>

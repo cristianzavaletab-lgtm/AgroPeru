@@ -87,12 +87,9 @@ export const ProductCatalog: React.FC = () => {
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.code) return;
-    let success = false;
-    if (editingProduct) {
-      success = updateProduct(editingProduct.id, formData);
-    } else {
-      success = addProduct(formData);
-    }
+    const success = editingProduct
+      ? updateProduct(editingProduct.id, formData)
+      : addProduct(formData);
     if (success) setShowModal(false);
   };
 

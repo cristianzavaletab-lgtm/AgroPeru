@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: agroperu
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: DNIRUC_API_TOKEN
+        sync: false

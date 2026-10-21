@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import { 
   LayoutDashboard, Package, History, ShoppingCart, 
   Receipt, FlaskConical, PackageCheck, ClipboardCheck, 
-  DollarSign, Users, X, ShieldCheck
+  DollarSign, Users, X, Building2
 } from 'lucide-react';
 import { Logo } from './ui/Logo';
 
@@ -18,9 +18,10 @@ export const Sidebar: React.FC = () => {
     { id: 'mixes', label: 'Mezclas', icon: FlaskConical },
     { id: 'products', label: 'Productos', icon: Package },
     { id: 'customers', label: 'Clientes', icon: Users },
+    { id: 'suppliers', label: 'Proveedores', icon: Building2 },
     { id: 'bags', label: 'Bolsas Vacías', icon: PackageCheck },
     { id: 'audit', label: 'Conteo Físico', icon: ClipboardCheck },
-    { id: 'financials', label: 'Caja Diaria', icon: DollarSign },
+    { id: 'financials', label: 'Caja y Resultados', icon: DollarSign },
   ];
 
   const handleSelectTab = (id: string) => {
@@ -50,6 +51,8 @@ export const Sidebar: React.FC = () => {
         <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between lg:hidden bg-slate-50 dark:bg-slate-950">
           <Logo compact={false} className="scale-75 origin-left" />
           <button
+            type="button"
+            aria-label="Cerrar menú"
             onClick={() => setSidebarOpen(false)}
             className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
           >

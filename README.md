@@ -1,118 +1,73 @@
-# 📖 Guía de Operación Humana & Manual Completo - AgroPerú
+# AgroPerú — gestión comercial e inventario
 
-Este documento es tu **Manual de Usuario y Guía de Operación Paso a Paso** para entender exactamente cómo funciona el negocio de AgroPerú en el sistema web y cómo operarlo sin complicaciones.
+Sistema web para administrar compras, proveedores, inventario, mezclas, ventas, clientes, bolsas vacías, caja y resultados. Puede ejecutarse como PWA y trabajar localmente; la sincronización con Supabase es opcional.
 
----
+## Inicio rápido
 
-## 📌 1. ¿Por qué este sistema reemplaza al Excel?
+Requisitos: Node.js 22 o superior y npm.
 
-Antes, en las hojas de Excel de Agosto y Septiembre, tenías que restar manualmente las ventas de una columna a otra y calcular las mezclas a mano. Eso provocaba celdas corruptas como `#DIV/0!` o `#VALUE!`.
-
-Con este sistema **todo está automatizado y conectado**:
-* Cuando compras $\rightarrow$ **Aumenta** el stock del Kardex.
-* Cuando vendes $\rightarrow$ **Disminuye** el stock del Kardex y se calcula el cobro.
-* Cuando formulas una mezcla $\rightarrow$ El sistema **descuenta las materias primas** (Urea, Sulfato, Cloruro) y **suma la mezcla producida**, consumiendo también los sacos vacíos de empaque.
-
----
-
-## 🔄 2. Flujo de Trabajo Recomendado (Paso a Paso)
-
-Para llevar un control perfecto de tu negocio, sigue este orden operativo diario:
-
-```text
-┌───────────────────────────────────────────────────────────────────────────┐
-│ 1. COMPRAS    ➜  2. MEZCLAS    ➜  3. VENTAS    ➜  4. AUDITORÍA ➜ 5. CAJAS │
-│ (Ingresar TM)    (Formular NPK)   (Proformas)    (Conteo Cel)  (Utilidad) │
-└───────────────────────────────────────────────────────────────────────────┘
+```powershell
+npm install
+Copy-Item .env.example .env
+npm run dev
 ```
 
----
+Abre `http://localhost:5173`. El comando inicia la interfaz y el servidor privado necesario para consultar DNI/RUC.
 
-### 🚛 PASO 1: Registrar Compras e Importaciones
-**Módulo:** `Compras`
-* **¿Cuándo usarlo?:** Cada vez que llegue un camión con fertilizantes desde el puerto o proveedor (INTI, Fertilizantes del Perú, Molinos & Cía).
-* **¿Cómo usarlo?:**
-  1. Entra a la pestaña **Compras** y presiona **`+ Nueva Compra`**.
-  2. Selecciona el Proveedor (ej. INTI Agroquímicos) e ingresa la Guía o Factura (ej. `F001-130579`).
-  3. Ingresa las Toneladas Métricas (TM) compradas de cada producto y el **Costo de Flete/Envío**.
-  4. Presiona **`Guardar & Aumentar Stock`**.
-* **¿Qué hace el sistema por ti?:** El sistema suma automáticamente las TM y sacos a tu inventario Kardex y registra el egreso de dinero.
+## Configuración DNI/RUC
 
----
+1. Revoca cualquier token que se haya compartido en un chat, captura o repositorio y genera uno nuevo.
+2. Copia `.env.example` como `.env`.
+3. Guarda el token nuevo únicamente en la variable del servidor:
 
-### 🧪 PASO 2: Formular & Producir Mezclas NPK
-**Módulo:** `Mezclas & Formulación`
-* **¿Cuándo usarlo?:** Cuando vayas a preparar combinaciones especiales de fertilizantes (ej. *Molimax Papa Sierra*, *Mezcla NPK Intermedia*).
-* **¿Cómo usarlo?:**
-  1. Entra a la pestaña **Mezclas & Formulación**.
-  2. Selecciona la Receta (ej. *Formulación Mezcla NPK Intermedia*).
-  3. Ingresa la cantidad en Toneladas (TM) que vas a producir en la planta (ej. `10 TM`).
-  4. Revisa el cuadro de insumos a la derecha: verás exactamente cuántas TM de Urea, Sulfato Blanco y KCl se consumirán.
-  5. Presiona **`Ejecutar Lote de Mezcla`**.
-* **¿Qué hace el sistema por ti?:** Resta las materias primas del Kardex, suma las 10 TM de mezcla lista a tu stock y descuenta los sacos vacíos de empaque.
+```dotenv
+DNIRUC_API_TOKEN=tu-token-nuevo
+API_PORT=3001
+```
 
----
+Nunca agregues el prefijo `VITE_` al token. Las variables `VITE_*` se incorporan al JavaScript público del navegador. El archivo `.env` está ignorado por Git.
 
-### 🧾 PASO 3: Registrar Ventas y Emitir Proformas
-**Módulo:** `Ventas & Proformas`
-* **¿Cuándo usarlo?:** Cada vez que atiendas a un cliente por mostrador o emitas una proforma.
-* **¿Cómo usarlo?:**
-  1. Entra a la pestaña **Ventas & Proformas** y presiona **`+ Registrar Venta`**.
-  2. Selecciona el Cliente (o créalo al instante con `+ Nuevo Cliente`).
-  3. Agrega los fertilizantes o mezclas vendidas y la cantidad en bolsas o TM.
-  4. Elige la **Forma de Pago**:
-     * **`PAGADO`**: Si el cliente te paga al contado (Efectivo, Yape o BCP).
-     * **`CRÉDITO`**: Si el cliente se lleva el producto y te pagará después.
-  5. Presiona **`Registrar & Descontar Kardex`**.
-* **¿Qué hace el sistema por ti?:** Descuenta el producto vendido de tu almacén. Si fue a Crédito, guarda la deuda en la ficha del cliente; si fue al Contado, suma el dinero a tu Caja 1.
-* **Imprimir Proforma:** Puedes presionar el icono de impresora en cualquier venta para generar la proforma digital con el **logo oficial de AgroPerú**.
+Desde **Clientes**, el botón **Consultar DNI/RUC** completa los datos disponibles. Desde **Proveedores**, **Consultar RUC** completa razón social, dirección, teléfono y estado tributario. Las consultas pasan por `/api/identity/*`, donde se validan los documentos, se limita la frecuencia y se aplica un tiempo máximo de espera.
 
----
+## Flujo operativo
 
-### 📋 PASO 4: Auditoría de Almacén & Conteo Físico
-**Módulo:** `Conteo Físico` y `Bolsas Vacías`
-* **¿Cuándo usarlo?:** Al final de la semana o cuando el almacenero haga inventario.
-* **¿Cómo usarlo?:**
-  1. El encargado entra a **Conteo Físico** desde su celular o tablet.
-  2. Ingresa la cantidad de TM reales que contó físicamente en el almacén.
-  3. El sistema resaltará en amarillo las diferencias (+/- TM).
-  4. Presiona **`Conciliar Diferencias en Kardex`** para ajustar el inventario automáticamente.
+1. Registra al proveedor con nombre, DNI/RUC, teléfono y dirección. El tipo se detecta por la longitud del documento y se reutilizan primero los datos ya guardados en Clientes o Proveedores; correo, teléfono alternativo, web y notas son opcionales.
+2. Registra la compra y sus productos. Los fletes pueden agregarse por separado y la mercadería puede permanecer pendiente de recojo, en tránsito o recibida.
+3. Revisa el Kardex o crea mezclas; ambos movimientos actualizan las existencias.
+4. Crea una proforma o venta con cantidad, descripción y precio. El pago puede ser efectivo, Yape, transferencia o crédito.
+5. Después de guardar la venta, selecciona si corresponde emitir boleta, factura o ningún comprobante.
+6. Controla ingresos, egresos, créditos, gastos de bolsas y fletes desde Caja y Estado de resultados, con filtros por día, semana, mes o rango personalizado.
 
----
+## SUNAT
 
-### 💰 PASO 5: Resultados Económicos & Control de Cajas
-**Módulo:** `Finanzas & Caja`
-* **¿Cuándo usarlo?:** Para consultar cuánto dinero está ingresando y cuál es tu ganancia neta.
-* **¿Qué información te da?:**
-  * **Utilidad por Bolsa:** Te dice exactamente cuántos Soles ganas netos por cada bolsa de Urea, Sulfato o Yaramila vendida.
-  * **Caja 1 (Principal BCP/Yape):** Todo el dinero recaudado por ventas al contado.
-  * **Caja 2 (Caja Chica Almacén):** Dinero en efectivo para gastos diarios (estiba, cintas, fletes cortos).
-  * Presiona **`+ Nuevo Movimiento de Caja`** si necesitas anotar un gasto extra.
+El modelo de venta conserva tipo, serie, número y estado del comprobante para una futura integración. La emisión electrónica real requiere credenciales SOL o un proveedor autorizado, certificado y ambiente de homologación/producción. El sistema no simula una aceptación de SUNAT cuando esas credenciales aún no existen.
 
----
+## Comandos de calidad y producción
 
-## ⚡ 3. Comandos para Ejecutar la Aplicación en Localhost
+```powershell
+npm test
+npm run lint
+npm run build
+npm start
+```
 
-Para encender el sistema en tu computadora y verlo en el navegador:
+`npm start` sirve la compilación desde `dist` y expone el proxy DNI/RUC en el puerto indicado por `PORT`, `API_PORT` o, en su defecto, `3000`.
 
-1. Abre tu consola (PowerShell o CMD) e ingresa a la carpeta del proyecto:
-   ```powershell
-   cd d:\Descargas\AgroPeru
-   ```
+Para validar el esquema Prisma también debes definir `DATABASE_URL`:
 
-2. Ejecuta el servidor local:
-   ```powershell
-   npm run dev
-   ```
+```powershell
+npx prisma validate
+```
 
-3. Abre tu navegador (Chrome, Edge, Brave) en la dirección:
-   👉 **`http://localhost:5173`**
+## Variables opcionales
 
----
+La aplicación funciona sin Supabase. Para habilitar sincronización remota configura:
 
-## 📱 4. ¿Cómo instalarlo como App en Celulares (PWA)?
+```dotenv
+VITE_ENABLE_SUPABASE_SYNC=true
+VITE_SUPABASE_URL=https://tu-proyecto.supabase.co
+VITE_SUPABASE_ANON_KEY=tu-clave-publica-anon
+DATABASE_URL=postgresql://usuario:clave@localhost:5432/agroperu
+```
 
-1. Conecta tu celular al mismo WiFi que la computadora.
-2. Ingresa desde Chrome en tu celular a la dirección de red local que te muestra la consola (ejemplo: `http://192.168.1.15:5173`).
-3. En el menú de Chrome del celular (3 puntos arriba a la derecha), selecciona **"Instalar Aplicación"** o **"Agregar a Pantalla de Inicio"**.
-4. ¡Listo! Se creará el icono oficial de **AgroPerú** en tu celular para usarlo como una aplicación nativa.
+La clave anónima de Supabase puede ser pública si las políticas RLS están configuradas correctamente; `DATABASE_URL` y `DNIRUC_API_TOKEN` siempre deben permanecer en el servidor.
