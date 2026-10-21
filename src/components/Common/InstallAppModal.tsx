@@ -40,8 +40,8 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 rounded-2xl bg-white p-2 shadow-lg flex items-center justify-center shrink-0 border border-emerald-100">
               <img 
-                src="/pwa-192x192.png" 
-                alt="AgroPerú Logo" 
+                src="/pwa-agroimportadora.png"
+                alt="Agroimportadora Perú E.I.R.L."
                 className="w-full h-full object-contain"
               />
             </div>
@@ -50,7 +50,7 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({
                 <Sparkles className="w-3 h-3" /> Aplicación Oficial
               </div>
               <h2 className="text-xl font-bold text-white mt-1">
-                Descargar AgroPerú ERP
+                Descargar Agroimportadora ERP
               </h2>
               <p className="text-xs text-emerald-100 mt-0.5">
                 Instálala directamente en tu escritorio o celular
@@ -103,7 +103,7 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({
                       Haz clic en <strong className="text-emerald-600 dark:text-emerald-400">"Instalar"</strong>.
                     </li>
                     <li>
-                      ¡Listo! Se creará el acceso directo con el logo de AgroPerú en tu <strong className="text-slate-900 dark:text-white">Escritorio</strong> y menú de inicio.
+                      ¡Listo! Se creará el acceso directo de Agroimportadora Perú en tu <strong className="text-slate-900 dark:text-white">Escritorio</strong> y menú de inicio.
                     </li>
                   </ol>
                 </div>
