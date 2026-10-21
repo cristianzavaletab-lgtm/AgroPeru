@@ -75,13 +75,21 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({
           ) : (
             <>
               {/* Direct Action Button */}
-              <button
-                onClick={onInstall}
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-semibold text-sm shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
-              >
-                <Download className="w-5 h-5" />
-                <span>{canPrompt ? 'Instalar ahora en tu equipo' : 'Ver cómo instalar en tu equipo'}</span>
-              </button>
+              {canPrompt ? (
+                <button
+                  type="button"
+                  onClick={onInstall}
+                  className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-semibold text-sm shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+                >
+                  <Download className="w-5 h-5" />
+                  <span>Instalar ahora en tu equipo</span>
+                </button>
+              ) : (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                  <strong>Instalación automática no disponible en este navegador.</strong>
+                  <p className="mt-1">Usa las instrucciones siguientes. Si ya la instalaste, abre la aplicación desde tu pantalla de inicio o escritorio.</p>
+                </div>
+              )}
 
               {/* Instructions per platform */}
               <div className="space-y-3 pt-2">

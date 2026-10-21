@@ -21,11 +21,13 @@ export default defineConfig(({ mode }) => {
       react(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['pwa-agroimportadora.png', 'logo-agroimportadora.png', 'logo-agroimportadora-dark.png'],
+        includeAssets: ['apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png', 'logo-agroimportadora.png', 'logo-agroimportadora-dark.png'],
         manifest: {
+          id: '/',
           name: 'Agroimportadora Perú E.I.R.L. - Sistema de Gestión',
           short_name: 'Agroimportadora',
           description: 'Sistema integral de inventarios, ventas, compras y producción de mezclas',
+          lang: 'es-PE',
           theme_color: '#059669',
           background_color: '#0f172a',
           display: 'standalone',
@@ -34,14 +36,14 @@ export default defineConfig(({ mode }) => {
           scope: '/',
           icons: [
             {
-              src: 'pwa-agroimportadora.png',
-              sizes: '1254x1254',
+              src: 'pwa-192x192.png',
+              sizes: '192x192',
               type: 'image/png',
               purpose: 'any maskable'
             },
             {
-              src: 'pwa-agroimportadora.png',
-              sizes: '1254x1254',
+              src: 'pwa-512x512.png',
+              sizes: '512x512',
               type: 'image/png',
               purpose: 'any maskable'
             }
