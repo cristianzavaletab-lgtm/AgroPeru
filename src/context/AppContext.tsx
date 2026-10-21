@@ -1,15 +1,15 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  Product, Category, Customer, Supplier, Purchase, Sale, 
-  InventoryMovement, MixRecipe, MixExecution, EmptyBagStock, 
+import {
+  Product, Category, Customer, Supplier, Purchase, Sale,
+  InventoryMovement, MixRecipe, MixExecution, EmptyBagStock,
   FinancialMovement, PhysicalAuditItem, ProductLot, CashClosing,
   PaymentMethod, SaleDocumentKind, PurchaseStatus
 } from '../types';
-import { 
-  initialProducts, initialCategories, initialCustomers, 
-  initialSuppliers, initialPurchases, initialSales, 
+import {
+  initialProducts, initialCategories, initialCustomers,
+  initialSuppliers, initialPurchases, initialSales,
   initialKardex, initialRecipes, initialBags, initialFinancials,
-  initialLots, initialExecutions 
+  initialLots, initialExecutions
 } from '../data/mockData';
 import { dbSync } from '../lib/supabaseSync';
 import { toLocalISODate } from '../utils/dateUtils';
@@ -90,7 +90,8 @@ interface AppContextType {
   executeMix: (recipeId: string, producedQtyTm: number, proformaNumber?: string) => boolean;
   addRecipe: (recipe: Omit<MixRecipe, 'id'>) => void;
   deleteRecipe: (id: string) => boolean;
-  updateBagStock: (id: string, incoming: number, outgoing: number, costPen?: number, paymentMethod?: PaymentMethod, notes?: string) => void;
+  recordBagMovement: (bagName: string, incoming: number, outgoing: number, costPen?: number, paymentMethod?: PaymentMethod, notes?: string, minStock?: number) => boolean;
+  updateBagStock: (bagIdOrName: string, incoming: number, outgoing: number, costPen?: number, paymentMethod?: PaymentMethod, notes?: string, minStock?: number) => boolean;
   reconcileAudit: (items: PhysicalAuditItem[]) => void;
   addFinancialMovement: (movement: Omit<FinancialMovement, 'id'>) => void;
   deleteFinancialMovement: (id: string) => boolean;
@@ -389,88 +390,88 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (purchaseStatus === 'RECIBIDO') {
 
-      const totalTmInPurchase = purchaseData.items.reduce((acc, i) => acc + i.quantityTm, 0);
-      const freightPerTm = totalTmInPurchase > 0 ? (purchaseData.freightCostPen / totalTmInPurchase) : 0;
+        const totalTmInPurchase = purchaseData.items.reduce((acc, i) => acc + i.quantityTm, 0);
+        const freightPerTm = totalTmInPurchase > 0 ? (purchaseData.freightCostPen / totalTmInPurchase) : 0;
 
-      const newLotsToAdd: ProductLot[] = [];
-      const newKardexItems: InventoryMovement[] = [];
+        const newLotsToAdd: ProductLot[] = [];
+        const newKardexItems: InventoryMovement[] = [];
 
-      purchaseData.items.forEach((item, itemIdx) => {
-        const p = products.find(prod => prod.id === item.productId);
-        const prodName = p?.name || 'PRODUCTO';
-        const lotNum = (item.lotNumber && item.lotNumber.trim()) || `LOT-${String(itemIdx + 1).padStart(3, '0')}`;
+        purchaseData.items.forEach((item, itemIdx) => {
+          const p = products.find(prod => prod.id === item.productId);
+          const prodName = p?.name || 'PRODUCTO';
+          const lotNum = (item.lotNumber && item.lotNumber.trim()) || `LOT-${String(itemIdx + 1).padStart(3, '0')}`;
 
-        // Unit cost calculation (incorporating freight per TM)
-        const baseCostPen = purchaseData.currency === 'USD'
-          ? ((item.pricePerTmUsd || 0) * purchaseData.exchangeRate)
-          : item.pricePerTmPen;
-        const effectiveUnitCostPen = parseFloat((baseCostPen + freightPerTm).toFixed(2));
-        const lotSalePricePen = item.salePricePen !== undefined && item.salePricePen > 0
-          ? item.salePricePen
-          : (p ? p.salePricePen : parseFloat((effectiveUnitCostPen * 1.15).toFixed(2)));
+          // Unit cost calculation (incorporating freight per TM)
+          const baseCostPen = purchaseData.currency === 'USD'
+            ? ((item.pricePerTmUsd || 0) * purchaseData.exchangeRate)
+            : item.pricePerTmPen;
+          const effectiveUnitCostPen = parseFloat((baseCostPen + freightPerTm).toFixed(2));
+          const lotSalePricePen = item.salePricePen !== undefined && item.salePricePen > 0
+            ? item.salePricePen
+            : (p ? p.salePricePen : parseFloat((effectiveUnitCostPen * 1.15).toFixed(2)));
 
-        // Create new ProductLot
-        const newLot: ProductLot = {
-          id: `lot-${Date.now()}-${itemIdx}-${Math.random().toString(36).substring(2, 6)}`,
-          productId: item.productId,
-          productName: prodName,
-          lotNumber: lotNum,
-          entryDate: dateStr,
-          initialQuantityTm: item.quantityTm,
-          currentQuantityTm: item.quantityTm,
-          initialBags: item.bags,
-          currentBags: item.bags,
-          unitCostPen: effectiveUnitCostPen,
-          salePricePen: lotSalePricePen,
-          status: 'DISPONIBLE',
-          purchaseDocNumber: purchaseData.docNumber,
-          supplierName: purchaseData.supplierName
-        };
-        newLotsToAdd.push(newLot);
+          // Create new ProductLot
+          const newLot: ProductLot = {
+            id: `lot-${Date.now()}-${itemIdx}-${Math.random().toString(36).substring(2, 6)}`,
+            productId: item.productId,
+            productName: prodName,
+            lotNumber: lotNum,
+            entryDate: dateStr,
+            initialQuantityTm: item.quantityTm,
+            currentQuantityTm: item.quantityTm,
+            initialBags: item.bags,
+            currentBags: item.bags,
+            unitCostPen: effectiveUnitCostPen,
+            salePricePen: lotSalePricePen,
+            status: 'DISPONIBLE',
+            purchaseDocNumber: purchaseData.docNumber,
+            supplierName: purchaseData.supplierName
+          };
+          newLotsToAdd.push(newLot);
 
-        // Update product stock and matrix totals
-        setProducts(prevProducts => prevProducts.map(prod => {
-          if (prod.id === item.productId) {
-            const newStockTm = parseFloat((prod.currentStockTm + item.quantityTm).toFixed(2));
-            const newBags = prod.currentBags + item.bags;
+          // Update product stock and matrix totals
+          setProducts(prevProducts => prevProducts.map(prod => {
+            if (prod.id === item.productId) {
+              const newStockTm = parseFloat((prod.currentStockTm + item.quantityTm).toFixed(2));
+              const newBags = prod.currentBags + item.bags;
 
-            const kardexItem: InventoryMovement = {
-              id: `kard-${Date.now()}-${itemIdx}-${Math.random().toString(36).substring(2, 7)}`,
-              productId: prod.id,
-              productName: prod.name,
-              lotNumber: lotNum,
-              type: 'PURCHASE',
-              quantityTm: item.quantityTm,
-              quantityBags: item.bags,
-              unitCostPen: effectiveUnitCostPen,
-              salePricePen: lotSalePricePen,
-              balanceStockTm: newStockTm,
-              balanceBags: newBags,
-              referenceType: 'PURCHASE',
-              referenceId: purchaseData.docNumber,
-              date: dateStr,
-              notes: `[Lote: ${lotNum}] Compra a ${purchaseData.supplierName} (${purchaseData.currency === 'USD' ? `$${item.pricePerTmUsd}/TM @ TC ${purchaseData.exchangeRate}` : `S/${item.pricePerTmPen}/TM`}) - Doc ${purchaseData.docNumber}`
-            };
-            newKardexItems.push(kardexItem);
-            dbSync.saveKardexMovement(kardexItem);
+              const kardexItem: InventoryMovement = {
+                id: `kard-${Date.now()}-${itemIdx}-${Math.random().toString(36).substring(2, 7)}`,
+                productId: prod.id,
+                productName: prod.name,
+                lotNumber: lotNum,
+                type: 'PURCHASE',
+                quantityTm: item.quantityTm,
+                quantityBags: item.bags,
+                unitCostPen: effectiveUnitCostPen,
+                salePricePen: lotSalePricePen,
+                balanceStockTm: newStockTm,
+                balanceBags: newBags,
+                referenceType: 'PURCHASE',
+                referenceId: purchaseData.docNumber,
+                date: dateStr,
+                notes: `[Lote: ${lotNum}] Compra a ${purchaseData.supplierName} (${purchaseData.currency === 'USD' ? `$${item.pricePerTmUsd}/TM @ TC ${purchaseData.exchangeRate}` : `S/${item.pricePerTmPen}/TM`}) - Doc ${purchaseData.docNumber}`
+              };
+              newKardexItems.push(kardexItem);
+              dbSync.saveKardexMovement(kardexItem);
 
-            const updatedP: Product = {
-              ...prod,
-              currentStockTm: newStockTm,
-              currentBags: newBags,
-              totalIngresoCompraTm: parseFloat((prod.totalIngresoCompraTm + item.quantityTm).toFixed(2)),
-              purchasePricePen: effectiveUnitCostPen,
-              salePricePen: lotSalePricePen || prod.salePricePen
-            };
-            dbSync.saveProduct(updatedP);
-            return updatedP;
-          }
-          return prod;
-        }));
-      });
+              const updatedP: Product = {
+                ...prod,
+                currentStockTm: newStockTm,
+                currentBags: newBags,
+                totalIngresoCompraTm: parseFloat((prod.totalIngresoCompraTm + item.quantityTm).toFixed(2)),
+                purchasePricePen: effectiveUnitCostPen,
+                salePricePen: lotSalePricePen || prod.salePricePen
+              };
+              dbSync.saveProduct(updatedP);
+              return updatedP;
+            }
+            return prod;
+          }));
+        });
 
-      setLots(prevLots => [...newLotsToAdd, ...prevLots]);
-      setKardex(kPrev => [...newKardexItems, ...kPrev]);
+        setLots(prevLots => [...newLotsToAdd, ...prevLots]);
+        setKardex(kPrev => [...newKardexItems, ...kPrev]);
       }
 
       const paidAmount = purchaseData.paidAmount ?? (purchaseData.paymentStatus === 'PAGADO' ? purchaseData.totalPen : 0);
@@ -592,9 +593,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             newKardexItems.push(kardexItem);
             dbSync.saveKardexMovement(kardexItem);
 
-            const updatedP = { 
-              ...prod, 
-              currentStockTm: newStockTm, 
+            const updatedP = {
+              ...prod,
+              currentStockTm: newStockTm,
               currentBags: newBags,
               totalVentasBags: prod.totalVentasBags + qtyBags
             };
@@ -740,7 +741,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (s.status === 'CREDITO' && newStatus === 'PAGADO') {
           const pendingDebt = s.totalAmount - s.paidAmount;
           setCustomers(cPrev => cPrev.map(c => c.id === s.customerId ? { ...c, currentDebt: Math.max(0, c.currentDebt - pendingDebt) } : c));
-          
+
           const newIncome: FinancialMovement = {
             id: `fin-${Date.now()}`,
             date: toLocalISODate(),
@@ -846,9 +847,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             };
             setKardex(kPrev => [kardexItem, ...kPrev]);
 
-            return { 
-              ...p, 
-              currentStockTm: newStockTm, 
+            return {
+              ...p,
+              currentStockTm: newStockTm,
               currentBags: newBags,
               totalPreparadoSalidaTm: p.totalPreparadoSalidaTm + consumedTm
             };
@@ -880,9 +881,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           };
           setKardex(kPrev => [kardexItem, ...kPrev]);
 
-          return { 
-            ...p, 
-            currentStockTm: newStockTm, 
+          return {
+            ...p,
+            currentStockTm: newStockTm,
             currentBags: newBags,
             totalPreparadoIngresoTm: p.totalPreparadoIngresoTm + producedQtyTm
           };
@@ -916,36 +917,68 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     triggerSuccess(`Formulación '${recipeData.name}' guardada.`);
   };
 
-  const updateBagStock = (id: string, incoming: number, outgoing: number, costPen = 0, paymentMethod: PaymentMethod = 'EFECTIVO', notes = '') => {
+  const recordBagMovement = (bagName: string, incoming: number, outgoing: number, costPen = 0, paymentMethod: PaymentMethod = 'EFECTIVO', notes = '', minStock = 10) => {
+    const cleanName = bagName.trim().replace(/\s+/g, ' ');
     const inc = Math.max(0, Number(incoming) || 0);
     const out = Math.max(0, Number(outgoing) || 0);
-    setEmptyBags(prev => prev.map(b => {
-      if (b.id === id) {
-        const newInc = b.ingresoCompra + inc;
-        const newOut = b.preparadoSalida + out;
-        return {
-          ...b,
-          ingresoCompra: newInc,
-          preparadoSalida: newOut,
-          saldoFinal: Math.max(0, newInc - newOut)
-        };
+    const existing = emptyBags.find(bag => bag.bagName.localeCompare(cleanName, 'es-PE', { sensitivity: 'base' }) === 0);
+
+    if (!cleanName) {
+      triggerError('Escribe o selecciona el tipo de bolsa.');
+      return false;
+    }
+    if (inc <= 0 && out <= 0) {
+      triggerError('La cantidad debe ser mayor que cero.');
+      return false;
+    }
+    if (!existing && out > 0) {
+      triggerError('Primero registra una compra o ingreso para crear este tipo de bolsa.');
+      return false;
+    }
+    if (existing && out > existing.saldoFinal) {
+      triggerError(`Solo hay ${existing.saldoFinal} bolsas disponibles de ${existing.bagName}.`);
+      return false;
+    }
+
+    setEmptyBags(prev => {
+      const current = prev.find(bag => bag.bagName.localeCompare(cleanName, 'es-PE', { sensitivity: 'base' }) === 0);
+      if (!current) {
+        return [...prev, {
+          id: `bag-${Date.now()}`,
+          bagName: cleanName,
+          ventas: 0,
+          preparadoSalida: 0,
+          ingresoCompra: inc,
+          saldoFinal: inc,
+          minStock: Math.max(0, Number(minStock) || 0),
+        }];
       }
-      return b;
-    }));
+      return prev.map(bag => bag.id === current.id ? {
+        ...bag,
+        ingresoCompra: bag.ingresoCompra + inc,
+        preparadoSalida: bag.preparadoSalida + out,
+        saldoFinal: Math.max(0, bag.saldoFinal + inc - out),
+      } : bag);
+    });
     if (costPen > 0) {
-      const bag = emptyBags.find(b => b.id === id);
       setFinancials(prev => [{
         id: `fin-bag-${Date.now()}`,
         date: toLocalISODate(),
         type: 'EGRESOS',
         category: 'BOLSAS',
-        description: `Compra de ${inc} bolsas ${bag?.bagName || ''}${notes ? ` - ${notes}` : ''}`,
+        description: `Compra de ${inc} bolsas ${existing?.bagName || cleanName}${notes ? ` - ${notes}` : ''}`,
         amountPen: costPen,
         cashRegister: 'CAJA_1',
         paymentMethod
       }, ...prev]);
     }
-    triggerSuccess(`Movimiento de bolsas guardado${costPen > 0 ? ' y registrado como gasto' : ''}.`);
+    triggerSuccess(`${inc > 0 ? 'Ingreso' : 'Salida'} de bolsas registrado${existing ? '' : '. El nuevo tipo quedó guardado para próximos movimientos'}.`);
+    return true;
+  };
+
+  const updateBagStock = (bagIdOrName: string, incoming: number, outgoing: number, costPen = 0, paymentMethod: PaymentMethod = 'EFECTIVO', notes = '', minStock = 10) => {
+    const target = emptyBags.find(bag => bag.id === bagIdOrName || bag.bagName.localeCompare(bagIdOrName, 'es-PE', { sensitivity: 'base' }) === 0);
+    return recordBagMovement(target ? target.bagName : bagIdOrName, incoming, outgoing, costPen, paymentMethod, notes, minStock);
   };
 
   const reconcileAudit = (items: PhysicalAuditItem[]) => {
@@ -962,8 +995,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setProducts(pPrev => pPrev.map(p => {
           if (p.id === item.productId) {
             const physicalCount = item.physicalCountTm as number;
-            const diffTm = item.differenceTm !== undefined && item.differenceTm !== null 
-              ? item.differenceTm 
+            const diffTm = item.differenceTm !== undefined && item.differenceTm !== null
+              ? item.differenceTm
               : parseFloat((physicalCount - p.currentStockTm).toFixed(2));
             const diffBags = Math.round(diffTm * (1000 / p.bagWeightKg));
             const newStockTm = physicalCount;
@@ -991,9 +1024,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               dbSync.saveKardexMovement(kardexItem);
             }
 
-            const updatedP = { 
-              ...p, 
-              currentStockTm: newStockTm, 
+            const updatedP = {
+              ...p,
+              currentStockTm: newStockTm,
               currentBags: newBags,
               conteoFisicoTm: physicalCount,
               diferenciaTm: 0
@@ -1138,7 +1171,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addSupplier, updateSupplier, deleteSupplier,
       addPurchase, updatePurchase, updatePurchaseStatus, deletePurchase,
       addSale, anularSale, deleteSale, updateSaleStatus, updateSale, issueSaleDocument, executeMix,
-      addRecipe, deleteRecipe, updateBagStock, reconcileAudit, addFinancialMovement, deleteFinancialMovement,
+      addRecipe, deleteRecipe, recordBagMovement, updateBagStock, reconcileAudit, addFinancialMovement, deleteFinancialMovement,
       saveCashClosing, deleteCashClosing, resetToDemoData
     }}>
       {children}

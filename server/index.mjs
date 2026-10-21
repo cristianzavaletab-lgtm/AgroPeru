@@ -7,7 +7,7 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const dist = join(root, 'dist');
 const port = Number(process.env.PORT || process.env.API_PORT || 3000);
 const host = process.env.HOST || '0.0.0.0';
-const apiToken = process.env.DNIRUC_API_TOKEN || '';
+const apiToken = (process.env.DNIRUC_API_TOKEN || process.env.VITE_DNIRUC_API_TOKEN || '').trim();
 const upstreamBase = 'https://dniruc.apisperu.com/api/v1';
 const requestsByIp = new Map();
 
