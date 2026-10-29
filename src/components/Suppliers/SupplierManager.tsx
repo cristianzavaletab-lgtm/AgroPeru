@@ -34,6 +34,7 @@ export const SupplierManager: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [isSaving, setIsSaving] = useState(false);
   const [lookupState, setLookupState] = useState<{ status: 'idle' | 'loading' | 'success' | 'error'; message: string }>({ status: 'idle', message: '' });
 
   const rows = useMemo(() => suppliers.filter(s => {
@@ -120,7 +121,7 @@ export const SupplierManager: React.FC = () => {
     }
   };
 
-  const save = (event: React.FormEvent) => {
+  const save = async (event: React.FormEvent) => {
     event.preventDefault();
     const document = form.ruc.replace(/\D/g, '');
     const docType = detectDocumentType(document);
@@ -141,8 +142,19 @@ export const SupplierManager: React.FC = () => {
       address: form.address?.trim(),
       email: form.email?.trim(),
     };
-    if (editingId) updateSupplier(editingId, cleanForm); else addSupplier(cleanForm);
-    setIsOpen(false);
+    if (editingId) {
+      updateSupplier(editingId, cleanForm);
+      setIsOpen(false);
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const saved = await addSupplier(cleanForm);
+      if (saved) setIsOpen(false);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const detectedType = detectDocumentType(form.ruc);
@@ -216,7 +228,7 @@ export const SupplierManager: React.FC = () => {
             <label className="form-label sm:col-span-2">Sitio web <span className="font-normal text-slate-400">(opcional)</span><input className="field" type="url" placeholder="https://proveedor.com" value={form.website} onChange={e => setForm({ ...form, website: e.target.value })} /></label>
             <label className="form-label sm:col-span-2">Notas <span className="font-normal text-slate-400">(opcional)</span><textarea className="field min-h-20" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} /></label>
           </div>
-          <div className="modal-actions"><button type="button" className="btn-secondary" onClick={() => setIsOpen(false)}>Cancelar</button><button className="btn-primary">{editingId ? 'Guardar cambios' : 'Crear proveedor'}</button></div>
+          <div className="modal-actions"><button type="button" className="btn-secondary" onClick={() => setIsOpen(false)} disabled={isSaving}>Cancelar</button><button className="btn-primary" disabled={isSaving}>{isSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando…</> : editingId ? 'Guardar cambios' : 'Crear proveedor'}</button></div>
         </form>
       </div></div>}
     </div>

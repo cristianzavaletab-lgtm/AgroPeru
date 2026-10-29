@@ -36,6 +36,10 @@ const normalizeSuppliers = (items: Supplier[]): Supplier[] => items.map(supplier
   docType: supplier.docType || (supplier.ruc.length === 8 ? 'DNI' : 'RUC'),
 }));
 
+type NewProductData = Omit<Product, 'id' | 'currentStockTm' | 'currentBags' | 'totalVentasBags' | 'totalPreparadoSalidaTm' | 'totalPreparadoIngresoTm' | 'totalIngresoCompraTm' | 'conteoFisicoTm' | 'diferenciaTm'> & {
+  initialStockBags?: number;
+};
+
 interface AppContextType {
   activeTab: string;
   setActiveTab: (tab: string) => void;
@@ -67,7 +71,7 @@ interface AppContextType {
 
   // Actions
   resetToDemoData: () => void;
-  addProduct: (product: Omit<Product, 'id' | 'currentStockTm' | 'currentBags' | 'totalVentasBags' | 'totalPreparadoSalidaTm' | 'totalPreparadoIngresoTm' | 'totalIngresoCompraTm' | 'conteoFisicoTm' | 'diferenciaTm'>) => boolean;
+  addProduct: (product: NewProductData) => boolean;
   quickAddProduct: (name: string, salePricePen?: number, purchasePricePen?: number, categoryId?: string) => Product;
   updateProduct: (id: string, product: Partial<Product>) => boolean;
   deleteProduct: (id: string) => boolean;
@@ -75,7 +79,7 @@ interface AppContextType {
   addCustomer: (customer: Omit<Customer, 'id' | 'currentDebt'>) => void;
   updateCustomer: (id: string, customer: Partial<Customer>) => void;
   deleteCustomer: (id: string) => boolean;
-  addSupplier: (supplier: Omit<Supplier, 'id'>) => void;
+  addSupplier: (supplier: Omit<Supplier, 'id'>) => Promise<boolean>;
   updateSupplier: (id: string, supplier: Partial<Supplier>) => void;
   deleteSupplier: (id: string) => boolean;
   addPurchase: (purchase: Omit<Purchase, 'id'>) => void;
@@ -267,26 +271,68 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Add Product
-  const addProduct = (productData: Omit<Product, 'id' | 'currentStockTm' | 'currentBags' | 'totalVentasBags' | 'totalPreparadoSalidaTm' | 'totalPreparadoIngresoTm' | 'totalIngresoCompraTm' | 'conteoFisicoTm' | 'diferenciaTm'>) => {
-    if (products.some(p => p.code.toLowerCase() === productData.code.toLowerCase())) {
-      triggerError(`El código SKU '${productData.code}' ya existe en el sistema.`);
+  const addProduct = (productData: NewProductData) => {
+    const { initialStockBags = 0, ...productFields } = productData;
+    if (products.some(p => p.code.toLowerCase() === productFields.code.toLowerCase())) {
+      triggerError(`El código SKU '${productFields.code}' ya existe en el sistema.`);
       return false;
     }
+    const startingBags = Math.max(0, Math.round(Number(initialStockBags) || 0));
+    const startingStockTm = Number(((startingBags * productFields.bagWeightKg) / 1000).toFixed(3));
+    const createdAt = Date.now();
     const newProduct: Product = {
-      ...productData,
-      id: `prod-${Date.now()}`,
-      currentStockTm: 0,
-      currentBags: 0,
+      ...productFields,
+      id: `prod-${createdAt}`,
+      currentStockTm: startingStockTm,
+      currentBags: startingBags,
       totalVentasBags: 0,
       totalPreparadoSalidaTm: 0,
       totalPreparadoIngresoTm: 0,
       totalIngresoCompraTm: 0,
-      conteoFisicoTm: 0,
+      conteoFisicoTm: startingStockTm,
       diferenciaTm: 0
     };
     setProducts(prev => [...prev, newProduct]);
     dbSync.saveProduct(newProduct);
-    triggerSuccess(`Producto '${productData.name}' creado correctamente.`);
+
+    if (startingBags > 0) {
+      const initialLot: ProductLot = {
+        id: `lot-initial-${createdAt}`,
+        productId: newProduct.id,
+        productName: newProduct.name,
+        lotNumber: 'STOCK-INICIAL',
+        entryDate: toLocalISODate(),
+        initialQuantityTm: startingStockTm,
+        currentQuantityTm: startingStockTm,
+        initialBags: startingBags,
+        currentBags: startingBags,
+        unitCostPen: newProduct.purchasePricePen,
+        salePricePen: newProduct.salePricePen,
+        status: 'DISPONIBLE',
+      };
+      const initialMovement: InventoryMovement = {
+        id: `kard-initial-${createdAt}`,
+        productId: newProduct.id,
+        productName: newProduct.name,
+        lotNumber: initialLot.lotNumber,
+        type: 'INITIAL_STOCK',
+        quantityTm: startingStockTm,
+        quantityBags: startingBags,
+        unitCostPen: newProduct.purchasePricePen,
+        salePricePen: newProduct.salePricePen,
+        balanceStockTm: startingStockTm,
+        balanceBags: startingBags,
+        referenceType: 'INITIAL',
+        referenceId: 'INVENTARIO-INICIAL',
+        date: toLocalISODate(),
+        notes: 'Existencia registrada al crear el producto',
+      };
+      setLots(prev => [...prev, initialLot]);
+      setKardex(prev => [initialMovement, ...prev]);
+      void dbSync.saveKardexMovement(initialMovement);
+    }
+
+    triggerSuccess(`Producto '${productFields.name}' creado con ${startingBags} bolsas de stock inicial.`);
     return true;
   };
 
@@ -406,18 +452,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Add Supplier
-  const addSupplier = (supplierData: Omit<Supplier, 'id'>) => {
+  const addSupplier = async (supplierData: Omit<Supplier, 'id'>): Promise<boolean> => {
     if (suppliers.some(supplier => supplier.ruc === supplierData.ruc)) {
       triggerError('Ya existe un proveedor con ese DNI o RUC.');
-      return;
+      return false;
     }
     const newSupplier: Supplier = {
       ...supplierData,
       id: `supp-${Date.now()}`
     };
-    setSuppliers(prev => [...prev, newSupplier]);
-    dbSync.saveSupplier(newSupplier);
-    triggerSuccess(`Proveedor '${supplierData.companyName}' agregado.`);
+    const nextSuppliers = [...suppliers, newSupplier];
+
+    setSuppliers(nextSuppliers);
+    localStorage.setItem('agroperu_suppliers', JSON.stringify(nextSuppliers));
+
+    try {
+      if (isSupabaseSyncEnabled) {
+        const snapshot: AppStateSnapshot = {
+          products, customers, suppliers: nextSuppliers, purchases, sales, kardex, lots,
+          mixRecipes, mixExecutions, emptyBags, financials, cashClosings,
+        };
+        await dbSync.saveAppState(snapshot);
+        lastRemoteSnapshotRef.current = JSON.stringify(snapshot);
+      }
+      triggerSuccess(`Proveedor '${supplierData.companyName}' guardado correctamente.`);
+      return true;
+    } catch (error) {
+      setSuppliers(suppliers);
+      localStorage.setItem('agroperu_suppliers', JSON.stringify(suppliers));
+      console.warn('No se pudo guardar el proveedor:', error);
+      triggerError('No se pudo confirmar el proveedor en la base de datos. Revisa la conexión de Supabase e inténtalo nuevamente.');
+      return false;
+    }
   };
 
   const updateSupplier = (id: string, supplierData: Partial<Supplier>) => {

@@ -10,6 +10,7 @@ export const ProductCatalog: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [initialStockBags, setInitialStockBags] = useState(0);
   const [showDollarPanel, setShowDollarPanel] = useState(false);
 
   // Pagination State
@@ -51,6 +52,7 @@ export const ProductCatalog: React.FC = () => {
   const tmFromBags = (bags: number, bagKg: number) => parseFloat((bags * bagKg / 1000).toFixed(3));
   const bagsFromTm = (tm: number, bagKg: number) => Math.round(tm * 1000 / bagKg);
   const minStockBags = bagsFromTm(formData.minStockTm, formData.bagWeightKg);
+  const initialStockTm = tmFromBags(initialStockBags, formData.bagWeightKg);
   const purchasePerBag = formData.purchasePricePen * formData.bagWeightKg / 1000;
   const salePerBag = formData.salePricePen * formData.bagWeightKg / 1000;
   const marginPerBag = salePerBag - purchasePerBag;
@@ -72,6 +74,7 @@ export const ProductCatalog: React.FC = () => {
 
   const handleOpenCreate = () => {
     setEditingProduct(null);
+    setInitialStockBags(0);
     setFormData({
       code: `PROD-${Math.floor(100 + Math.random() * 900)}`,
       name: '',
@@ -102,7 +105,7 @@ export const ProductCatalog: React.FC = () => {
     };
     const success = editingProduct
       ? updateProduct(editingProduct.id, normalized)
-      : addProduct(normalized);
+      : addProduct({ ...normalized, initialStockBags });
     if (success) setShowModal(false);
   };
 
@@ -379,6 +382,7 @@ export const ProductCatalog: React.FC = () => {
                         <button
                           onClick={() => {
                             setEditingProduct(prod);
+                            setInitialStockBags(prod.currentBags);
                             setFormData({
                               code: prod.code,
                               name: prod.name,
@@ -569,6 +573,34 @@ export const ProductCatalog: React.FC = () => {
                 </div>
               </div>
 
+              {!editingProduct && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/30">
+                  <div className="mb-3">
+                    <div className="text-xs font-bold text-emerald-900 dark:text-emerald-200">Stock con el que estás iniciando</div>
+                    <p className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-400">Registra las existencias que ya están físicamente en tu almacén. No se contabilizan como una compra nueva.</p>
+                  </div>
+                  <div className="grid items-end gap-3 sm:grid-cols-2">
+                    <label className="text-xs font-medium text-emerald-900 dark:text-emerald-200">
+                      Cantidad inicial de bolsas
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={initialStockBags || ''}
+                        onChange={(event) => setInitialStockBags(Math.max(0, Math.round(Number(event.target.value) || 0)))}
+                        placeholder="Ej. 1600"
+                        className="mt-1 w-full rounded-lg border border-emerald-300 bg-white px-3 py-2 text-right text-sm font-bold text-emerald-950 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-emerald-800 dark:bg-slate-900 dark:text-emerald-100"
+                      />
+                    </label>
+                    <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs text-emerald-900 dark:border-emerald-900 dark:bg-slate-900 dark:text-emerald-200">
+                      <div className="text-[10px] uppercase tracking-wide text-emerald-600">Equivalencia automática</div>
+                      <strong className="mt-1 block text-base">{initialStockBags.toLocaleString('es-PE')} bolsas = {initialStockTm.toFixed(3)} TM</strong>
+                      <span className="text-[10px] text-emerald-600">Se creará el lote “STOCK-INICIAL” y su movimiento en Kardex.</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Prices with TM + bolsa dual inputs */}
               <div className="space-y-2">
                 <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
@@ -633,7 +665,7 @@ export const ProductCatalog: React.FC = () => {
                 </div>
               </div>
 
-              <div className={`rounded-xl border p-3 text-xs ${marginPerBag >= 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-rose-200 bg-rose-50 text-rose-900'}`}><strong>Margen estimado por bolsa: S/ {marginPerBag.toFixed(2)}</strong><div className="mt-1">Compra S/ {purchasePerBag.toFixed(2)} · Venta S/ {salePerBag.toFixed(2)} · No modifica el stock actual.</div></div>
+              <div className={`rounded-xl border p-3 text-xs ${marginPerBag >= 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-rose-200 bg-rose-50 text-rose-900'}`}><strong>Margen estimado por bolsa: S/ {marginPerBag.toFixed(2)}</strong><div className="mt-1">Compra S/ {purchasePerBag.toFixed(2)} · Venta S/ {salePerBag.toFixed(2)} · {editingProduct ? 'No modifica el stock actual.' : `Stock inicial: ${initialStockBags.toLocaleString('es-PE')} bolsas.`}</div></div>
 
               <div className="flex items-center gap-4 pt-1">
                 <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700 dark:text-slate-300">
