@@ -14,6 +14,7 @@ import {
 import { AppStateSnapshot, dbSync } from '../lib/supabaseSync';
 import { isSupabaseSyncEnabled } from '../lib/supabase';
 import { toLocalISODate } from '../utils/dateUtils';
+import { serializeSnapshot } from '../utils/snapshotSerialization';
 
 const loadLocal = <T,>(key: string, fallback: T): T => {
   try {
@@ -205,7 +206,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const applySnapshot = (snapshot: AppStateSnapshot) => {
       if (!active) return;
-      lastRemoteSnapshotRef.current = JSON.stringify(snapshot);
+      const serialized = serializeSnapshot(snapshot);
+      if (serialized === lastRemoteSnapshotRef.current) return;
+      lastRemoteSnapshotRef.current = serialized;
       if (Array.isArray(snapshot.products)) setProducts(snapshot.products);
       if (Array.isArray(snapshot.customers)) setCustomers(normalizeCustomerNames(snapshot.customers));
       if (Array.isArray(snapshot.suppliers)) setSuppliers(normalizeSuppliers(snapshot.suppliers));
@@ -228,7 +231,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           applySnapshot(remoteState);
         } else {
           await dbSync.saveAppState(initialSnapshotRef.current);
-          lastRemoteSnapshotRef.current = JSON.stringify(initialSnapshotRef.current);
+          lastRemoteSnapshotRef.current = serializeSnapshot(initialSnapshotRef.current);
         }
         remoteSyncReadyRef.current = true;
         setSyncStatus('GUARDADO');
@@ -253,8 +256,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       products, customers, suppliers, purchases, sales, kardex, lots,
       mixRecipes, mixExecutions, emptyBags, financials, cashClosings,
     };
-    const serialized = JSON.stringify(snapshot);
-    if (serialized === lastRemoteSnapshotRef.current) return;
+    const serialized = serializeSnapshot(snapshot);
+    if (serialized === lastRemoteSnapshotRef.current) {
+      setSyncStatus('GUARDADO');
+      return;
+    }
     let cancelled = false;
     setSyncStatus('GUARDANDO');
     const timer = window.setTimeout(() => {
@@ -267,7 +273,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (!cancelled) setSyncStatus('ERROR');
           console.warn('No se pudo guardar el estado compartido:', error);
         });
-    }, 500);
+    }, 150);
     return () => { cancelled = true; window.clearTimeout(timer); };
   }, [products, customers, suppliers, purchases, sales, kardex, lots, mixRecipes, mixExecutions, emptyBags, financials, cashClosings]);
 
@@ -490,7 +496,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           mixRecipes, mixExecutions, emptyBags, financials, cashClosings,
         };
         await dbSync.saveAppState(snapshot);
-        lastRemoteSnapshotRef.current = JSON.stringify(snapshot);
+        lastRemoteSnapshotRef.current = serializeSnapshot(snapshot);
       }
       triggerSuccess(`Proveedor '${supplierData.companyName}' guardado correctamente.`);
       return true;

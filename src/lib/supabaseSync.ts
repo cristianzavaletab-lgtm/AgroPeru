@@ -29,6 +29,7 @@ export const dbSync = {
       .from('app_state')
       .select('payload')
       .eq('id', stateId)
+      .abortSignal(AbortSignal.timeout(12_000))
       .maybeSingle();
     if (error) throw error;
     return data?.payload as AppStateSnapshot | null;
@@ -40,7 +41,7 @@ export const dbSync = {
       id: stateId,
       payload,
       updated_at: new Date().toISOString(),
-    });
+    }).abortSignal(AbortSignal.timeout(12_000));
     if (error) throw error;
   },
 
