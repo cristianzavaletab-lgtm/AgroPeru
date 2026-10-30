@@ -41,6 +41,7 @@ type NewProductData = Omit<Product, 'id' | 'currentStockTm' | 'currentBags' | 't
 };
 
 interface AppContextType {
+  syncStatus: 'LOCAL' | 'CARGANDO' | 'GUARDANDO' | 'GUARDADO' | 'ERROR';
   activeTab: string;
   setActiveTab: (tab: string) => void;
   isLoading: boolean;
@@ -107,6 +108,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [syncStatus, setSyncStatus] = useState<AppContextType['syncStatus']>(isSupabaseSyncEnabled ? 'CARGANDO' : 'LOCAL');
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -229,8 +231,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           lastRemoteSnapshotRef.current = JSON.stringify(initialSnapshotRef.current);
         }
         remoteSyncReadyRef.current = true;
+        setSyncStatus('GUARDADO');
         unsubscribe = dbSync.subscribeToAppState(applySnapshot);
       } catch (err) {
+        if (active) setSyncStatus('ERROR');
         console.warn('No se pudo cargar el estado compartido de Supabase:', err);
       }
     }
@@ -251,12 +255,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     const serialized = JSON.stringify(snapshot);
     if (serialized === lastRemoteSnapshotRef.current) return;
+    let cancelled = false;
+    setSyncStatus('GUARDANDO');
     const timer = window.setTimeout(() => {
       void dbSync.saveAppState(snapshot)
-        .then(() => { lastRemoteSnapshotRef.current = serialized; })
-        .catch(error => console.warn('No se pudo guardar el estado compartido:', error));
+        .then(() => {
+          lastRemoteSnapshotRef.current = serialized;
+          if (!cancelled) setSyncStatus('GUARDADO');
+        })
+        .catch(error => {
+          if (!cancelled) setSyncStatus('ERROR');
+          console.warn('No se pudo guardar el estado compartido:', error);
+        });
     }, 500);
-    return () => window.clearTimeout(timer);
+    return () => { cancelled = true; window.clearTimeout(timer); };
   }, [products, customers, suppliers, purchases, sales, kardex, lots, mixRecipes, mixExecutions, emptyBags, financials, cashClosings]);
 
   const triggerSuccess = (msg: string) => {
@@ -403,7 +415,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const hasHistory = purchases.some(purchase => purchase.items.some(item => item.productId === productId))
       || sales.some(sale => sale.items.some(item => item.productId === productId))
-      || kardex.some(movement => movement.productId === productId)
+      || kardex.some(movement => movement.productId === productId && movement.type !== 'INITIAL_STOCK')
+      || mixExecutions.some(execution => {
+        const recipe = mixRecipes.find(item => item.id === execution.mixRecipeId);
+        return recipe?.targetProductId === productId || execution.consumedItems.some(item => item.productId === productId);
+      })
       || mixRecipes.some(recipe => recipe.targetProductId === productId || recipe.ingredients.some(item => item.productId === productId));
     if (hasHistory) {
       triggerError(`No se puede eliminar '${prod.name}' porque tiene movimientos. Edítalo y desmarca “Activo en catálogo” para conservar la trazabilidad.`);
@@ -412,6 +428,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setProducts(prev => prev.filter(p => p.id !== productId));
     setLots(prev => prev.filter(l => l.productId !== productId));
+    setKardex(prev => prev.filter(movement => movement.productId !== productId));
     triggerSuccess(`Producto '${prod.name}' eliminado correctamente.`);
     return true;
   };
@@ -1305,6 +1322,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   return (
     <AppContext.Provider value={{
+      syncStatus,
       activeTab, setActiveTab,
       isLoading, setIsLoading,
       errorMessage, setErrorMessage,

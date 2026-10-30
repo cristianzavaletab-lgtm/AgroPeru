@@ -3,6 +3,7 @@ import { ArrowDownRight, ArrowUpRight, CalendarDays, FileBarChart, Plus, Save, T
 import { useApp } from '../../context/AppContext';
 import { FinancialMovement, PaymentMethod } from '../../types';
 import { toLocalISODate } from '../../utils/dateUtils';
+import { exportToCSV } from '../../utils/exportUtils';
 
 type Period = 'DIA' | 'SEMANA' | 'MES' | 'PERSONALIZADO';
 const iso = (date: Date) => toLocalISODate(date);
@@ -30,6 +31,13 @@ export const FinancialReports: React.FC = () => {
   const [movement, setMovement] = useState<Omit<FinancialMovement, 'id'>>({ date: today(), type: 'EGRESOS', category: 'OTROS', description: '', amountPen: 0, cashRegister: 'CAJA_1', paymentMethod: 'EFECTIVO' });
 
   const setPreset = (next: Period) => { setPeriod(next); if (next !== 'PERSONALIZADO') { const range = rangeFor(next); setFrom(range.from); setTo(range.to); } };
+  const selectMonth = (value: string) => {
+    if (!/^\d{4}-\d{2}$/.test(value)) return;
+    const [year, monthNumber] = value.split('-').map(Number);
+    setPeriod('MES');
+    setFrom(`${value}-01`);
+    setTo(iso(new Date(year, monthNumber, 0)));
+  };
   const inside = (date: string) => date >= from && date <= to;
   const cash = financials.filter(f => inside(f.date));
   const periodSales = sales.filter(s => s.status !== 'ANULADO' && inside(s.saleDate));
@@ -47,11 +55,25 @@ export const FinancialReports: React.FC = () => {
   const grossProfit = salesTotal - costOfSales;
   const netProfit = grossProfit - operatingExpenses;
   const receivable = periodSales.reduce((sum, s) => sum + Math.max(0, s.totalAmount - s.paidAmount), 0);
+  const exportPeriod = () => exportToCSV(cash.map(item => ({
+    Fecha: item.date,
+    Concepto: item.description,
+    Categoría: item.category,
+    Método: item.paymentMethod || '',
+    Caja: item.cashRegister,
+    'Ingreso S/': item.type === 'INGRESOS' ? item.amountPen : 0,
+    'Egreso S/': item.type === 'EGRESOS' ? item.amountPen : 0,
+  })), `Caja_${from}_a_${to}`);
 
   const saveMovement = (event: React.FormEvent) => { event.preventDefault(); addFinancialMovement(movement); setMovementOpen(false); setMovement({ ...movement, description: '', amountPen: 0 }); };
   const saveClosing = (event: React.FormEvent) => { event.preventDefault(); saveCashClosing({ from, to, label: `${period === 'DIA' ? 'Cierre diario' : period === 'SEMANA' ? 'Cierre semanal' : period === 'MES' ? 'Cierre mensual' : 'Cierre personalizado'} · ${from} a ${to}`, incomePen: income, expensePen: expense, balancePen: cashBalance, salesPen: salesTotal, purchasesPen: purchaseTotal, notes: closingNotes }); setClosingOpen(false); setClosingNotes(''); };
 
   return <div className="space-y-5">
+    <section className="card flex flex-wrap items-end gap-3 p-4">
+      <label className="form-label">Consultar un mes<input type="month" className="field" value={period === 'MES' ? from.slice(0, 7) : ''} onChange={event => selectMonth(event.target.value)} /></label>
+      <button className="btn-secondary" onClick={exportPeriod} disabled={!cash.length}>Exportar movimientos del periodo (CSV para Excel)</button>
+      <p className="text-xs text-slate-500">La exportación respeta las fechas seleccionadas. Los cierres guardados conservan el resumen original.</p>
+    </section>
     <section className="page-header"><div><div className="eyebrow">Control financiero</div><h1 className="page-title"><Wallet className="h-5 w-5 text-emerald-600" /> Caja y resultados</h1><p className="page-subtitle">Filtra por día, semana, mes o rango; guarda cierres y revisa la rentabilidad.</p></div><div className="flex gap-2"><button className="btn-secondary" onClick={() => setMovementOpen(true)}><Plus className="h-4 w-4" /> Movimiento</button><button className="btn-primary" onClick={() => setClosingOpen(true)}><Save className="h-4 w-4" /> Guardar cierre</button></div></section>
 
     <section className="card p-4"><div className="flex flex-col gap-3 lg:flex-row lg:items-end"><div className="flex flex-wrap gap-2">{(['DIA', 'SEMANA', 'MES', 'PERSONALIZADO'] as Period[]).map(p => <button key={p} className={period === p ? 'btn-primary' : 'btn-secondary'} onClick={() => setPreset(p)}>{p === 'DIA' ? 'Hoy' : p === 'SEMANA' ? 'Esta semana' : p === 'MES' ? 'Este mes' : 'Personalizado'}</button>)}</div><div className="flex flex-1 gap-3 lg:justify-end"><label className="form-label">Desde<input type="date" className="field" value={from} onChange={e => { setPeriod('PERSONALIZADO'); setFrom(e.target.value); }} /></label><label className="form-label">Hasta<input type="date" className="field" value={to} onChange={e => { setPeriod('PERSONALIZADO'); setTo(e.target.value); }} /></label></div></div></section>

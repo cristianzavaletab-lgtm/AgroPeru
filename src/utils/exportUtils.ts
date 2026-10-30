@@ -37,4 +37,5 @@ export function exportToCSV(data: Record<string, any>[], filename: string) {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

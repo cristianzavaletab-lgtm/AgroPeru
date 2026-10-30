@@ -72,10 +72,21 @@ const LoadingOverlay: React.FC = () => {
 };
 
 const MainContent: React.FC = () => {
-  const { activeTab } = useApp();
+  const { activeTab, syncStatus } = useApp();
+  const syncMessages = {
+    LOCAL: 'Guardado en este navegador · sincronización con la base de datos desactivada',
+    CARGANDO: 'Cargando datos de la base de datos…',
+    GUARDANDO: 'Guardando cambios en la base de datos… Espera antes de cerrar.',
+    GUARDADO: 'Cambios guardados en la base de datos',
+    ERROR: 'No se pudo confirmar la sincronización. Tus cambios locales se conservan; revisa la conexión antes de cerrar.',
+  };
 
   return (
     <main className="flex-1 p-4 lg:p-6 max-w-7xl mx-auto w-full relative min-w-0">
+      <div role="status" aria-live="polite" className={`mb-4 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs ${syncStatus === 'ERROR' ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'}`}>
+        {(syncStatus === 'CARGANDO' || syncStatus === 'GUARDANDO') && <Loader2 className="h-4 w-4 animate-spin" />}
+        {syncMessages[syncStatus]}
+      </div>
       {activeTab === 'dashboard' && <Overview />}
       {activeTab === 'sales' && <SalesManager />}
       {activeTab === 'purchases' && <PurchaseRegister />}

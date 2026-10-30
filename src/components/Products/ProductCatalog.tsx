@@ -404,7 +404,7 @@ export const ProductCatalog: React.FC = () => {
                         </button>
                         <button
                           onClick={() => {
-                            if (window.confirm(`¿Estás seguro de eliminar el producto "${prod.name}" y sus lotes asociados?`)) {
+                            if (window.confirm(`¿Eliminar "${prod.name}"? Si solo tiene stock inicial, se eliminarán también ese saldo, su lote y su registro inicial. Los productos con compras, ventas u otros movimientos se conservan.`)) {
                               deleteProduct(prod.id);
                             }
                           }}
