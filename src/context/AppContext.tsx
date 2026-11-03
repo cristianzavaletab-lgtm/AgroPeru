@@ -153,6 +153,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
   const remoteSyncReadyRef = useRef(false);
   const lastRemoteSnapshotRef = useRef('');
+  // Supabase accepts concurrent upserts, but they may finish in a different
+  // order than they were started. Keep the writes serialized so an older
+  // snapshot can never overwrite a newer product, sale, or supplier.
+  const remoteSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const remoteSaveVersionRef = useRef(0);
 
   // Reset/seed all system data to rich demo dataset
   const resetToDemoData = () => {
@@ -250,6 +255,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   // Persist local changes as one atomic snapshot after the remote hydration finishes.
+  // The short debounce groups one user action (for example, product + initial
+  // stock + Kardex) and the queue prevents out-of-order writes under load.
   useEffect(() => {
     if (!isSupabaseSyncEnabled || !remoteSyncReadyRef.current) return;
     const snapshot: AppStateSnapshot = {
@@ -262,16 +269,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     let cancelled = false;
+    const version = ++remoteSaveVersionRef.current;
     setSyncStatus('GUARDANDO');
     const timer = window.setTimeout(() => {
-      void dbSync.saveAppState(snapshot)
-        .then(() => {
-          lastRemoteSnapshotRef.current = serialized;
-          if (!cancelled) setSyncStatus('GUARDADO');
-        })
-        .catch(error => {
-          if (!cancelled) setSyncStatus('ERROR');
-          console.warn('No se pudo guardar el estado compartido:', error);
+      remoteSaveQueueRef.current = remoteSaveQueueRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          // A newer snapshot is already waiting. It includes every module,
+          // therefore this older version must not be written.
+          if (version !== remoteSaveVersionRef.current) return;
+          try {
+            await dbSync.saveAppState(snapshot);
+            lastRemoteSnapshotRef.current = serialized;
+            if (!cancelled && version === remoteSaveVersionRef.current) setSyncStatus('GUARDADO');
+          } catch (error) {
+            if (!cancelled && version === remoteSaveVersionRef.current) setSyncStatus('ERROR');
+            console.warn('No se pudo guardar el estado compartido:', error);
+          }
         });
     }, 150);
     return () => { cancelled = true; window.clearTimeout(timer); };
